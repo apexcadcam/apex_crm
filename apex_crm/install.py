@@ -403,9 +403,15 @@ def migrate_contact_data():
 						frappe.db.commit()
 						print(f"   Processed {count} leads...")
 			
+			
 			except Exception as e:
 				print(f"⚠️ Failed to migrate Lead {lead_data.name}: {str(e)}")
-				# Continue to next lead
+				frappe.log_error(
+					title=f"Lead Migration Failed: {lead_data.name}",
+					message=frappe.get_traceback()
+				)
+				# Explicitly continue to next lead without marking this one as migrated
+				continue
 					
 		frappe.db.commit()
 		print(f"✅ Migrated contact data for {count} Leads\n")
