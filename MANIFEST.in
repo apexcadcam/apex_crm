@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include apex_crm *.css
+recursive-include apex_crm *.csv
+recursive-include apex_crm *.html
+recursive-include apex_crm *.ico
+recursive-include apex_crm *.js
+recursive-include apex_crm *.json
+recursive-include apex_crm *.md
+recursive-include apex_crm *.png
+recursive-include apex_crm *.py
+recursive-include apex_crm *.svg
+recursive-include apex_crm *.txt
+recursive-exclude apex_crm *.pyc

@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/apex_crm/css/apex_crm.css"
-# app_include_js = "/assets/apex_crm/js/apex_crm.js"
+# app_include_js = ["/assets/apex_crm/js/apex_notifications.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/apex_crm/css/apex_crm.css"
@@ -43,8 +43,12 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_js = {
+	"Lead": "public/js/lead.js"
+}
+doctype_list_js = {
+	"Lead": "public/js/lead_list.js"
+}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
@@ -82,14 +86,69 @@ app_license = "mit"
 # Installation
 # ------------
 
-# before_install = "apex_crm.install.before_install"
-# after_install = "apex_crm.install.after_install"
+before_install = "apex_crm.install.before_install"
+after_install = "apex_crm.install.after_install"
+after_migrate = "apex_crm.install.after_install"
 
 # Uninstallation
 # ------------
 
-# before_uninstall = "apex_crm.uninstall.before_uninstall"
+before_uninstall = "apex_crm.uninstall.before_uninstall"
 # after_uninstall = "apex_crm.uninstall.after_uninstall"
+
+# Fixtures
+# --------
+# Export customizations to fixtures for version control and deployment
+
+fixtures = [
+	# Custom Fields - CRM Module Customizations
+	{
+		"dt": "Custom Field",
+		"filters": [
+			["dt", "in", [
+				"Lead",
+				"Opportunity", 
+				"Campaign",
+				"Competitor"
+			]]
+		],
+	},
+	# Property Setters - CRM Module Customizations
+	{
+		"dt": "Property Setter",
+		"filters": [
+			["doc_type", "in", [
+				"Lead",
+				"Opportunity",
+				"Campaign", 
+				"Competitor"
+			]]
+		],
+	},
+	# Client Scripts - CRM Module Customizations
+	{
+		"dt": "Client Script",
+		"filters": [
+			["module", "=", "Apex CRM"]
+		],
+	},
+	# Custom HTML Blocks - will be added when customizations are created
+	# {
+	# 	"dt": "Custom HTML Block",
+	# 	"filters": [
+	# 		["name", "in", [
+	# 			# Add block names here
+	# 		]]
+	# 	],
+	# },
+	# Workspaces - will be added when customizations are created
+	# {
+	# 	"dt": "Workspace",
+	# 	"filters": [
+	# 		["name", "=", "Apex CRM"]
+	# 	]
+	# },
+]
 
 # Integration Setup
 # ------------------
@@ -137,13 +196,11 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Lead": {
+		"on_update": "apex_crm.api.sync_contacts"
+	}
+}
 
 # Scheduled Tasks
 # ---------------
