@@ -109,7 +109,9 @@ fixtures = [
 				"Lead",
 				"Opportunity", 
 				"Campaign",
-				"Competitor"
+				"Competitor",
+				"Note",
+				"Event"
 			]]
 		],
 	},

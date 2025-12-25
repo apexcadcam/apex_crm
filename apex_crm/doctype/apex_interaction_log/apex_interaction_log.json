@@ -1,0 +1,65 @@
+{
+    "actions": [],
+    "creation": "2024-12-22 23:58:04.213839",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "type",
+        "timestamp",
+        "user",
+        "status",
+        "duration",
+        "summary"
+    ],
+    "fields": [
+        {
+            "fieldname": "type",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Type",
+            "options": "Call\\nWhatsApp\\nSMS\\nEmail\\nFacebook\\nInstagram\\nLinkedIn\\nTelegram\\nTikTok\\nSnapchat\\nX\\nLocation\\nOther"
+        },
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "in_list_view": 1,
+            "label": "Timestamp"
+        },
+        {
+            "fieldname": "user",
+            "fieldtype": "Link",
+            "label": "Agent",
+            "options": "User"
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Status",
+            "options": "Attempted\\nConnected\\nBusy\\nNo Answer\\nLeft Message\\nScheduled\\nCompleted\\nAnswered"
+        },
+        {
+            "fieldname": "duration",
+            "fieldtype": "Duration",
+            "label": "Duration"
+        },
+        {
+            "fieldname": "summary",
+            "fieldtype": "Small Text",
+            "label": "Summary"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "istable": 1,
+    "links": [],
+    "modified": "2024-12-25 10:19:59.468119",
+    "modified_by": "Administrator",
+    "module": "Apex CRM",
+    "name": "Apex Interaction Log",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}
