@@ -6,20 +6,22 @@ from frappe.model.document import Document
 
 
 class ApexInteractionLog(Document):
-	# begin: auto-generated types
-	# This code is auto-generated. Do not modify anything in this block.
+\t# begin: auto-generated types
+\t# This code is auto-generated. Do not modify anything in this block.
 
-	from typing import TYPE_CHECKING
+\tfrom typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
-		from frappe.types import DF
+\tif TYPE_CHECKING:
+\t\tfrom frappe.types import DF
 
-		duration: DF.Duration | None
-		status: DF.Literal["Attempted", "Connected", "Busy", "No Answer", "Left Message", "Scheduled", "Completed", "Answered"] | None
-		summary: DF.SmallText | None
-		timestamp: DF.Datetime | None
-		type: DF.Literal["Call", "WhatsApp", "SMS", "Email", "Facebook", "Instagram", "LinkedIn", "Telegram", "TikTok", "Snapchat", "X", "Location", "Other"] | None
-		user: DF.Link | None
-	# end: auto-generated types
+\t\tagent: DF.Link | None
+\t\tduration: DF.Duration | None
+\t\tinteraction_date: DF.Datetime
+\t\tinteraction_type: DF.Literal["Call", "WhatsApp", "Facebook", "Email", "Meeting", "Other"]
+\t\tlead: DF.Link
+\t\tnotes: DF.TextEditor | None
+\t\tstatus: DF.Literal["Completed", "Attempted", "Scheduled", "Cancelled"] | None
+\t\tsummary: DF.Data | None
+\t# end: auto-generated types
 
-	pass
+\tpass
