@@ -13,7 +13,7 @@ def after_install():
 	This ensures consistent setup across all servers
 	"""
 	print("\n" + "="*80)
-	print("Apex CRM: Starting Automatic Migration")
+	print("Apex CRM: Starting Automatic Setup")
 	print("="*80 + "\n")
 	
 	try:
@@ -29,11 +29,15 @@ def after_install():
 		# Step 4: Setup Custom DocTypes
 		setup_custom_doctypes()
 
-		# Step 5: Migrate Legacy Data (Mobile, Email, Facebook)
-		migrate_contact_data()
+		# Step 5: Contact Data Migration - DISABLED
+		# Automatic migration is disabled to allow manual data entry
+		# Users can add contacts manually using the Apex Contacts section
+		# migrate_contact_data()  # ← Disabled for manual data entry
 		
 		print("\n" + "="*80)
-		print("Apex CRM: Migration Completed Successfully!")
+		print("Apex CRM: Setup Completed Successfully!")
+		print("\nNote: Automatic contact migration is DISABLED.")
+		print("Please add contacts manually in the 'Apex Contacts' section.")
 		print("="*80 + "\n")
 		
 		frappe.db.commit()
