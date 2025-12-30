@@ -18,6 +18,7 @@ apex_crm.duplicate_manager = {
     },
 
     make_ui: function () {
+        console.log('Duplicate Manager (v2) loaded');
         let me = this;
         this.page.add_menu_item('Refresh', () => me.load_duplicates());
 
@@ -42,6 +43,16 @@ apex_crm.duplicate_manager = {
 						</div>
 					`);
                 }
+            },
+            error: function (r) {
+                console.error('Duplicate Manager Error:', r);
+                me.wrapper.html(`
+                    <div class="text-center text-danger" style="padding: 50px;">
+                        <i class="fa fa-exclamation-triangle" style="font-size: 32px; margin-bottom: 15px;"></i><br>
+                        Error loading duplicates.<br>
+                        <small>${r.message || 'Please check console logs'}</small>
+                    </div>
+                `);
             }
         });
     },

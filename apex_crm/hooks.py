@@ -40,7 +40,7 @@ app_license = "mit"
 # webform_include_css = {"doctype": "public/css/doctype.css"}
 
 # include js in page
-# page_js = {"page" : "public/js/file.js"}
+page_js = {"duplicate-manager": "page/duplicate_manager/duplicate_manager.js"}
 
 # include js in doctype views
 doctype_js = {
@@ -101,32 +101,26 @@ before_uninstall = "apex_crm.uninstall.before_uninstall"
 # Export customizations to fixtures for version control and deployment
 
 fixtures = [
-	# Custom Fields - CRM Module Customizations
+	# Custom Fields - Only Apex Contacts Section fields
 	{
 		"dt": "Custom Field",
 		"filters": [
-			["dt", "in", [
-				"Lead",
-				"Opportunity", 
-				"Campaign",
-				"Competitor",
-				"Note",
-				"Event"
-			]]
+			["dt", "=", "Lead"],
+			["module", "=", "Apex CRM"]
 		],
 	},
-	# Property Setters - CRM Module Customizations
-	{
-		"dt": "Property Setter",
-		"filters": [
-			["doc_type", "in", [
-				"Lead",
-				"Opportunity",
-				"Campaign", 
-				"Competitor"
-			]]
-		],
-	},
+	# Property Setters - REMOVED: No longer hiding any fields
+	# {
+	# 	"dt": "Property Setter",
+	# 	"filters": [
+	# 		["doc_type", "in", [
+	# 			"Lead",
+	# 			"Opportunity",
+	# 			"Campaign", 
+	# 			"Competitor"
+	# 		]]
+	# 	],
+	# },
 	# Client Scripts - CRM Module Customizations
 	{
 		"dt": "Client Script",

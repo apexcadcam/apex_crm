@@ -17,7 +17,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Type",
-            "options": "Call\\nWhatsApp\\nSMS\\nEmail\\nFacebook\\nInstagram\\nLinkedIn\\nTelegram\\nTikTok\\nSnapchat\\nX\\nLocation\\nOther"
+            "options": "Call\nWhatsApp\nSMS\nEmail\nFacebook\nInstagram\nLinkedIn\nTelegram\nTikTok\nSnapchat\nX\nLocation\nOther"
         },
         {
             "fieldname": "timestamp",
@@ -36,7 +36,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Status",
-            "options": "Attempted\\nConnected\\nBusy\\nNo Answer\\nLeft Message\\nScheduled\\nCompleted\\nAnswered"
+            "options": "Attempted\nConnected\nBusy\nNo Answer\nLeft Message\nScheduled\nCompleted\nAnswered"
         },
         {
             "fieldname": "duration",

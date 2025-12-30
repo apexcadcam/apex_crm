@@ -6,8 +6,9 @@ if (!window.apex_crm) {
 
 frappe.ui.form.on('Lead', {
 	refresh: function (frm) {
-		// Hide standard child table, we use custom UI
+		// Hide standard child tables, we use custom UI
 		frm.set_df_property('interaction_history', 'hidden', 1);
+		frm.set_df_property('smart_contact_details', 'hidden', 1);
 
 		apex_crm.render_contacts(frm);
 		apex_crm.render_interaction_history(frm);
@@ -289,15 +290,16 @@ apex_crm.get_contact_card_html = function (row, index) {
 		action_btns = `
 			<a href="https://wa.me/${clean_number}" target="_blank" class="log-interaction" data-action-type="WhatsApp" data-value="${full_value}" style="color: #25D366; ${icon_style}" ${hover} title="WhatsApp"><i class="fa fa-whatsapp"></i></a>
 			<a href="tel:${full_value}" class="log-interaction" data-action-type="Call" data-value="${full_value}" style="color: #00b65e; ${icon_style}" ${hover} title="Call"><i class="fa fa-phone"></i></a>
-			<a href="sms:${full_value}" style="color: #f39c12; ${icon_style}" ${hover} title="SMS"><i class="fa fa-comment"></i></a>
+			<a href="sms:${full_value}" class="log-interaction" data-action-type="SMS" data-value="${full_value}" style="color: #f39c12; ${icon_style}" ${hover} title="SMS"><i class="fa fa-comment"></i></a>
 		`;
 	} else if (effective_type === 'Phone') {
 		action_btns = `
 			<a href="tel:${full_value}" class="log-interaction" data-action-type="Call" data-value="${full_value}" style="color: #333; ${icon_style}" ${hover} title="Call"><i class="fa fa-phone"></i></a>
+			<a href="sms:${full_value}" class="log-interaction" data-action-type="SMS" data-value="${full_value}" style="color: #f39c12; ${icon_style}" ${hover} title="SMS"><i class="fa fa-comment"></i></a>
 		`;
 	} else if (effective_type === 'Email') {
 		// Link directly to Gmail Compose
-		action_btns = `<a href="https://mail.google.com/mail/?view=cm&fs=1&to=${full_value}" target="_blank" style="color: #EA4335; ${icon_style}" ${hover} title="Send via Gmail"><i class="fa fa-envelope"></i></a>`;
+		action_btns = `<a href="https://mail.google.com/mail/?view=cm&fs=1&to=${full_value}" target="_blank" class="log-interaction" data-action-type="Email" data-value="${full_value}" style="color: #EA4335; ${icon_style}" ${hover} title="Send via Gmail"><i class="fa fa-envelope"></i></a>`;
 	} else if (effective_type === 'WhatsApp') {
 		action_btns = `<a href="https://wa.me/${clean_number}" target="_blank" class="log-interaction" data-action-type="WhatsApp" data-value="${full_value}" style="color: #25D366; ${icon_style}" ${hover} title="WhatsApp"><i class="fa fa-whatsapp"></i></a>`;
 	} else if (effective_type === 'Telegram') {
@@ -358,23 +360,25 @@ apex_crm.get_contact_card_html = function (row, index) {
 		</div>
 		
 		<!-- Controls -->
-		<div style="display: flex; align-items: center; margin-left: auto; gap: 6px;">
+		<div style="display: flex; align-items: center; margin-left: auto; gap: 4px;">
 			<!-- Edit Button -->
 			<div class="edit-contact-btn" data-index="${index}" title="Edit" 
-				style="width: 24px; height: 24px; border-radius: 50%; background: #eef0f2; color: #555; 
-				display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s;"
-				onmouseover="this.style.background='#dce2e6'" 
-				onmouseout="this.style.background='#eef0f2'">
-				<i class="fa fa-pencil" style="font-size: 10px;"></i>
+				style="width: 20px; height: 20px; border-radius: 50%; background: #f0f4f8; color: #495057; 
+				display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
+				transition: all 0.15s ease; border: none;"
+				onmouseover="this.style.background='#dee2e6'; this.style.transform='scale(1.1)'" 
+				onmouseout="this.style.background='#f0f4f8'; this.style.transform='scale(1)'">
+				<i class="fa fa-pencil" style="font-size: 9px;"></i>
 			</div>
 
 			<!-- Delete Button -->
 			<div class="delete-contact-btn" data-index="${index}" title="Remove" 
-				style="width: 24px; height: 24px; border-radius: 50%; background: #ffebeb; color: #ff6b6b; 
-				display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s;"
-				onmouseover="this.style.background='#ffc9c9'" 
-				onmouseout="this.style.background='#ffebeb'">
-				<i class="fa fa-minus" style="font-size: 10px;"></i>
+				style="width: 20px; height: 20px; border-radius: 50%; background: #fff5f5; color: #dc3545; 
+				display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
+				transition: all 0.15s ease; border: none;"
+				onmouseover="this.style.background='#ffe0e0'; this.style.transform='scale(1.1)'" 
+				onmouseout="this.style.background='#fff5f5'; this.style.transform='scale(1)'">
+				<i class="fa fa-trash" style="font-size: 9px;"></i>
 			</div>
 		</div>
 	</div>
@@ -737,6 +741,10 @@ apex_crm.render_interaction_history = function (frm) {
 	history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
 	let rows_html = history.map((row, index) => {
+		// Ensure row has a name (for saved rows) or use a unique identifier
+		if (!row.name && row.__name) {
+			row.name = row.__name;
+		}
 		let user_img = frappe.user_info(row.user).image;
 		let user_fullname = frappe.user_info(row.user).fullname;
 		let avatar_html = frappe.avatar(row.user, 'avatar-small', row.user); // generates standard avatar html
@@ -774,8 +782,11 @@ apex_crm.render_interaction_history = function (frm) {
 		// Summary truncation
 		let summary = row.summary || '';
 
+		// Use row identifier: name if exists, otherwise use timestamp + type as unique identifier
+		let row_id = row.name || `temp-${row.timestamp}-${row.type}-${index}`;
+
 		return `
-		<tr style="border-bottom: 1px solid #ebf1f1;" class="interaction-row" data-name="${row.name}">
+		<tr style="border-bottom: 1px solid #ebf1f1;" class="interaction-row" data-row-id="${row_id}">
 			<td style="padding: 10px; text-align: center;">
 				<i class="${type_icon}" style="font-size: 16px; color: ${type_color};"></i>
 			</td>
@@ -792,9 +803,23 @@ apex_crm.render_interaction_history = function (frm) {
 			<td style="padding: 10px; font-size: 13px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0;" title="${summary}">
 				${summary}
 			</td>
-			<td style="padding: 10px; text-align: right; white-space: nowrap;">
-				<button class="btn btn-xs btn-default edit-interaction-btn" data-name="${row.name}" title="Edit"><i class="fa fa-pencil"></i></button>
-				<button class="btn btn-xs btn-danger delete-interaction-btn" data-name="${row.name}" style="margin-left: 5px;" title="Delete"><i class="fa fa-trash"></i></button>
+			<td style="padding: 10px; text-align: center; white-space: nowrap;">
+				<button type="button" class="btn btn-xs btn-default edit-interaction-btn" data-row-id="${row_id}" data-timestamp="${row.timestamp || ''}" data-type="${row.type || ''}" title="Edit" 
+					style="width: 20px; height: 20px; border-radius: 50%; background: #f0f4f8; color: #495057; 
+					display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
+					transition: all 0.15s ease; border: none; margin: 0 2px; padding: 0; outline: none;"
+					onmouseover="this.style.background='#dee2e6'; this.style.transform='scale(1.1)'" 
+					onmouseout="this.style.background='#f0f4f8'; this.style.transform='scale(1)'">
+					<i class="fa fa-pencil" style="font-size: 9px;"></i>
+				</button>
+				<button type="button" class="btn btn-xs btn-danger delete-interaction-btn" data-row-id="${row_id}" data-timestamp="${row.timestamp || ''}" data-type="${row.type || ''}" title="Delete" 
+					style="width: 20px; height: 20px; border-radius: 50%; background: #fff5f5; color: #dc3545; 
+					display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
+					transition: all 0.15s ease; border: none; margin: 0 2px; padding: 0; outline: none;"
+					onmouseover="this.style.background='#ffe0e0'; this.style.transform='scale(1.1)'" 
+					onmouseout="this.style.background='#fff5f5'; this.style.transform='scale(1)'">
+					<i class="fa fa-trash" style="font-size: 9px;"></i>
+				</button>
 			</td>
 		</tr>
 		`;
@@ -818,7 +843,7 @@ apex_crm.render_interaction_history = function (frm) {
 						<th style="padding: 10px; width: 110px; background: #fcfcfc; border-bottom: 1px solid #eee;">Status</th>
 						<th style="padding: 10px; width: 80px; background: #fcfcfc; border-bottom: 1px solid #eee;">Duration</th>
 						<th style="padding: 10px; background: #fcfcfc; border-bottom: 1px solid #eee;">Summary</th>
-						<th style="padding: 10px; width: 90px; background: #fcfcfc; border-bottom: 1px solid #eee;"></th>
+						<th style="padding: 10px; width: 60px; text-align: center; background: #fcfcfc; border-bottom: 1px solid #eee;">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -831,22 +856,172 @@ apex_crm.render_interaction_history = function (frm) {
 
 	$(wrapper).html(table_html);
 
-	// Bind Edit Event
-	$(wrapper).find('.edit-interaction-btn').on('click', function () {
-		let name = $(this).data('name');
-		apex_crm.edit_interaction_dialog(frm, name);
-	});
+	// Bind Edit Event - using same pattern as Apex Contacts
+	$(wrapper).on('click', '.edit-interaction-btn', function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			
+			console.log('Edit button clicked!');
+			
+			// Prevent double-click
+			if ($(this).hasClass('editing')) {
+				console.log('Edit: Already editing, ignoring click');
+				return;
+			}
+			$(this).addClass('editing');
+			
+			let row_id = $(this).data('row-id');
+			let timestamp = $(this).data('timestamp');
+			let type = $(this).data('type');
+			
+			console.log('Edit: Searching for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
+			
+			// Find row by name or by timestamp + type
+			// IMPORTANT: Search in frm.doc.interaction_history (original order), not in sorted history
+			let row = null;
+			
+			// Try to find by name first (most reliable)
+			if (row_id && !row_id.startsWith('temp-')) {
+				row = frm.doc.interaction_history.find(r => r.name === row_id);
+				if (row) {
+					console.log('Edit: Found row by name:', row);
+				}
+			}
+			
+			// If not found by name, try by timestamp + type
+			if (!row && timestamp && type) {
+				// Normalize timestamp for comparison
+				let search_timestamp_normalized = timestamp ? timestamp.toString().substring(0, 16) : '';
+				
+				row = frm.doc.interaction_history.find(r => {
+					if (!r.timestamp || !r.type) return false;
+					let r_timestamp_normalized = r.timestamp.toString().substring(0, 16);
+					return r_timestamp_normalized === search_timestamp_normalized && r.type === type;
+				});
+				if (row) {
+					console.log('Edit: Found row by timestamp+type:', row);
+				}
+			}
+			
+			if (row) {
+				console.log('Edit: Opening dialog for row:', row);
+				apex_crm.edit_interaction_dialog(frm, row);
+				// Remove editing flag after dialog is shown
+				setTimeout(() => {
+					$(this).removeClass('editing');
+				}, 500);
+			} else {
+				console.error('Edit: Row not found! row_id:', row_id, 'Available rows:', frm.doc.interaction_history.map(r => ({name: r.name, timestamp: r.timestamp, type: r.type})));
+				// Remove editing flag if row not found
+				$(this).removeClass('editing');
+			}
+		});
+	
+	console.log('Edit event handlers bound. Found buttons:', $(wrapper).find('.edit-interaction-btn').length);
 
-	// Bind Delete Event
-	$(wrapper).find('.delete-interaction-btn').on('click', function () {
-		let name = $(this).data('name');
-		frappe.confirm('Are you sure you want to delete this interaction?', () => {
-			// Remove from locals and doc list
-			frappe.model.clear_doc("Apex Interaction Log", name);
-			frm.doc.interaction_history = frm.doc.interaction_history.filter(r => r.name !== name);
+	// Bind Delete Event - using same pattern as Apex Contacts
+	$(wrapper).on('click', '.delete-interaction-btn', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		
+		// Prevent double-click
+		if ($(this).hasClass('deleting')) {
+			return;
+		}
+		$(this).addClass('deleting');
+		
+		let row_id = $(this).data('row-id');
+		let timestamp = $(this).data('timestamp');
+		let type = $(this).data('type');
+		
+		console.log('Delete clicked for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
+		
+		// Use row_id, timestamp, type directly in callback (they're in closure scope)
+		frappe.confirm('Are you sure you want to delete this interaction?', function() {
+			// Find row by name or by timestamp + type
+			// IMPORTANT: Search in frm.doc.interaction_history (original order), not in sorted history
+			let row = null;
+			let row_index = -1;
+			
+			// Debug: Log what we're searching for
+			console.log('Delete: Searching for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
+			console.log('Delete: Available rows:', frm.doc.interaction_history.map((r, idx) => ({
+				index: idx,
+				name: r.name,
+				timestamp: r.timestamp,
+				type: r.type
+			})));
+			
+			// Try to find by name first (most reliable)
+			if (row_id && !row_id.startsWith('temp-')) {
+				row_index = frm.doc.interaction_history.findIndex(r => r.name === row_id);
+				if (row_index >= 0) {
+					row = frm.doc.interaction_history[row_index];
+					console.log('Delete: Found by name at index:', row_index, 'row name:', row.name);
+				} else {
+					console.log('Delete: Not found by name, row_id:', row_id, 'Available names:', frm.doc.interaction_history.map(r => r.name));
+				}
+			}
+			
+			// If not found by name, try by timestamp + type
+			if (row_index < 0 && timestamp && type) {
+				// Normalize timestamp for comparison
+				let search_timestamp_normalized = timestamp ? timestamp.toString().substring(0, 16) : '';
+				
+				row_index = frm.doc.interaction_history.findIndex(r => {
+					if (!r.timestamp || !r.type) return false;
+					let r_timestamp_normalized = r.timestamp.toString().substring(0, 16);
+					return r_timestamp_normalized === search_timestamp_normalized && r.type === type;
+				});
+				
+				if (row_index >= 0) {
+					row = frm.doc.interaction_history[row_index];
+					console.log('Delete: Found by timestamp+type at index:', row_index, 'row name:', row.name);
+				} else {
+					console.log('Delete: Not found by timestamp+type');
+				}
+			}
+			
+			if (row && row_index >= 0) {
+				console.log('Delete: Deleting row at index:', row_index, 'row name:', row.name);
+				
+				// Store row name before removal
+				let row_name = row.name;
+				
+				// Remove from array first (same pattern as delete_contact)
+				frm.doc.interaction_history.splice(row_index, 1);
+				console.log('Delete: Row removed from array');
+				
+				// Remove from locals if it has a name (saved row)
+				if (row_name) {
+					frappe.model.remove_from_locals("Apex Interaction Log", row_name);
+					console.log('Delete: Row removed from locals:', row_name);
+				}
 
+			// Refresh UI immediately
 			frm.refresh_field('interaction_history');
-			frm.save();
+			
+			// Mark form as dirty so changes can be saved
+			frm.dirty();
+			
+			// Re-render custom UI
+			apex_crm.render_interaction_history(frm);
+			
+			// Save changes
+			frm.save(null, function() {
+				console.log('Delete: Row deleted and saved');
+			});
+			} else {
+				console.error('Delete: Row not found! row_id:', row_id, 'row_index:', row_index, 'Available:', frm.doc.interaction_history.map((r, idx) => ({index: idx, name: r.name})));
+			}
+			
+			// Remove deleting flag after a delay
+			setTimeout(() => {
+				$(wrapper).find('.delete-interaction-btn').removeClass('deleting');
+			}, 1000);
+		}, () => {
+			// Cancel callback - remove deleting flag
+			$(wrapper).find('.delete-interaction-btn').removeClass('deleting');
 		});
 	});
 };
@@ -1016,9 +1191,15 @@ apex_crm.quick_add_dialog = function (frm, doctype) {
 };
 
 
-apex_crm.edit_interaction_dialog = function (frm, row_name) {
-	let row = frm.doc.interaction_history.find(r => r.name === row_name);
-	if (!row) return;
+apex_crm.edit_interaction_dialog = function (frm, row) {
+	// row can be either a row object or a row_name string
+	if (typeof row === 'string') {
+		row = frm.doc.interaction_history.find(r => r.name === row);
+	}
+	if (!row) {
+		console.error('Row not found for editing');
+		return;
+	}
 
 	let d = new frappe.ui.Dialog({
 		title: `Edit Interaction Details`,
@@ -1027,8 +1208,8 @@ apex_crm.edit_interaction_dialog = function (frm, row_name) {
 				label: 'Status',
 				fieldname: 'status',
 				fieldtype: 'Select',
-				options: 'Attempted\nConnected\nBusy\nNo Answer\nLeft Message\nScheduled',
-				default: row.status,
+				options: 'Attempted\nConnected\nBusy\nNo Answer\nLeft Message\nScheduled\nCompleted\nAnswered',
+				default: row.status || 'Attempted',
 				reqd: 1
 			},
 			{
@@ -1042,15 +1223,31 @@ apex_crm.edit_interaction_dialog = function (frm, row_name) {
 				label: 'Summary / Notes',
 				fieldname: 'summary',
 				fieldtype: 'Small Text',
-				default: row.summary
+				default: row.summary || ''
 			}
 		],
 		primary_action_label: 'Save',
 		primary_action: function (values) {
-			frappe.model.set_value(row.doctype, row.name, 'status', values.status);
-			frappe.model.set_value(row.doctype, row.name, 'duration', values.duration);
-			frappe.model.set_value(row.doctype, row.name, 'summary', values.summary);
-			frm.save();
+			// For unsaved rows, use frappe.model.set_value with the row object
+			if (row.name) {
+				frappe.model.set_value(row.doctype, row.name, 'status', values.status);
+				frappe.model.set_value(row.doctype, row.name, 'duration', values.duration);
+				frappe.model.set_value(row.doctype, row.name, 'summary', values.summary);
+			} else {
+				// Unsaved row - set directly
+				row.status = values.status;
+				row.duration = values.duration;
+				row.summary = values.summary;
+			}
+			frm.refresh_field('interaction_history');
+			
+			// Mark form as dirty so changes can be saved
+			frm.dirty();
+			
+			frm.save().then(() => {
+				// Re-render interaction history after save
+				apex_crm.render_interaction_history(frm);
+			});
 			d.hide();
 		}
 	});
@@ -1060,7 +1257,25 @@ apex_crm.edit_interaction_dialog = function (frm, row_name) {
 apex_crm.log_interaction = function (frm, type, value) {
 	// 1. Add row to Interaction Log
 	let row = frappe.model.add_child(frm.doc, 'Apex Interaction Log', 'interaction_history');
-	row.type = type;
+	
+	// Ensure type matches the exact options in the DocType
+	// Valid options: "Call", "WhatsApp", "SMS", "Email", "Facebook", "Instagram", "LinkedIn", "Telegram", "TikTok", "Snapchat", "X", "Location", "Other"
+	// Map any variations to the correct value
+	let valid_type = type;
+	if (type && typeof type === 'string') {
+		valid_type = type.trim();
+		// Ensure it matches exactly (case-sensitive)
+		const valid_types = ["Call", "WhatsApp", "SMS", "Email", "Facebook", "Instagram", "LinkedIn", "Telegram", "TikTok", "Snapchat", "X", "Location", "Other"];
+		if (!valid_types.includes(valid_type)) {
+			console.warn(`Invalid interaction type: "${type}", defaulting to "Other"`);
+			valid_type = "Other";
+		}
+	} else {
+		valid_type = "Other";
+	}
+	
+	// Set the type using frappe.model.set_value to ensure proper validation
+	frappe.model.set_value(row.doctype, row.name, 'type', valid_type);
 
 	// Use a stable timestamp for lookup
 	let timestamp = frappe.datetime.now_datetime();
@@ -1072,7 +1287,14 @@ apex_crm.log_interaction = function (frm, type, value) {
 	frm.refresh_field('interaction_history');
 
 	// 2. Save Form immediately to persist log
-	frm.save_or_update();
+	// Use callback instead of promise for compatibility
+	frm.save(null, () => {
+		// Re-render interaction history after save
+		apex_crm.render_interaction_history(frm);
+	}, () => {
+		// If save fails, still re-render
+		apex_crm.render_interaction_history(frm);
+	});
 
 	// 3. Show "Interaction Details" Prompt (Non-blocking)
 	// We use a small delay to let the user switch focus back to the CRM after the call/chat
@@ -1112,7 +1334,10 @@ apex_crm.log_interaction = function (frm, type, value) {
 					frappe.model.set_value(target_row.doctype, target_row.name, 'duration', values.duration);
 					frappe.model.set_value(target_row.doctype, target_row.name, 'summary', values.summary);
 
-					frm.save(); // Save again with details
+					frm.save().then(() => {
+						// Re-render interaction history after save
+						apex_crm.render_interaction_history(frm);
+					});
 				}
 				d.hide();
 			}

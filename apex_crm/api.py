@@ -1,7 +1,10 @@
 import frappe
+from frappe import _
 import json
 import re
 from werkzeug.wrappers import Response
+
+
 
 @frappe.whitelist()
 def check_duplicate_contact(value):
@@ -113,11 +116,19 @@ def get_duplicate_groups():
         HAVING count > 1
     """, as_dict=True)
 
+
+
     if not raw_duplicates:
         return []
 
+    # Check Page Permission to ensure authorized access
+    # We allow access if the user has permission to the 'duplicate-manager' page.
+    if not has_page_permission('duplicate-manager'):
+        frappe.throw(_("You do not have permission to access Duplicate Manager."))
+
     # 2. Get Ignore List {value: ignored_count}
-    ignored_list = frappe.db.get_all("Apex Ignored Duplicate", fields=["value", "ignored_count"])
+    # We ignore permissions here because if the user has Page access, they should be able to read this config.
+    ignored_list = frappe.db.get_all("Apex Ignored Duplicate", fields=["value", "ignored_count"], ignore_permissions=True)
     ignored_map = {d.value: d.ignored_count for d in ignored_list}
 
     results = []
@@ -184,7 +195,10 @@ def cleanup_contacts(lead_name):
     if doc.smart_contact_details:
             for row in doc.smart_contact_details:
                 # Normalize signature
-                sig = (row.type, (row.value or "").strip(), row.country_code)
+                row_type = row.get('type') if isinstance(row, dict) else row.type
+                row_value = row.get('value') if isinstance(row, dict) else row.value
+                row_country_code = row.get('country_code') if isinstance(row, dict) else row.country_code
+                sig = (row_type, (row_value or "").strip(), row_country_code)
                 if sig not in seen:
                     seen.add(sig)
                     unique_contacts.append(row)
@@ -239,19 +253,19 @@ def sync_contacts(doc, method):
 	# This ensures standard list views and filters still work
 	updates = {}
 	if not doc.mobile_no:
-		mobile = next((d.value for d in doc.smart_contact_details if d.type == 'Mobile'), None)
+		mobile = next((d.get('value') if isinstance(d, dict) else d.value for d in doc.smart_contact_details if (d.get('type') if isinstance(d, dict) else d.type) == 'Mobile'), None)
 		if mobile: updates['mobile_no'] = mobile
 
 	if not doc.email_id:
-		email = next((d.value for d in doc.smart_contact_details if d.type == 'Email'), None)
+		email = next((d.get('value') if isinstance(d, dict) else d.value for d in doc.smart_contact_details if (d.get('type') if isinstance(d, dict) else d.type) == 'Email'), None)
 		if email: updates['email_id'] = email
 	
 	if not doc.phone:
-		phone = next((d.value for d in doc.smart_contact_details if d.type == 'Phone'), None)
+		phone = next((d.get('value') if isinstance(d, dict) else d.value for d in doc.smart_contact_details if (d.get('type') if isinstance(d, dict) else d.type) == 'Phone'), None)
 		if phone: updates['phone'] = phone
 	
 	if not doc.website:
-		website = next((d.value for d in doc.smart_contact_details if d.type == 'Website'), None)
+		website = next((d.get('value') if isinstance(d, dict) else d.value for d in doc.smart_contact_details if (d.get('type') if isinstance(d, dict) else d.type) == 'Website'), None)
 		if website: updates['website'] = website
 
 	if updates:
@@ -265,18 +279,22 @@ def sync_contacts(doc, method):
 	
 	# A. Pull from Child Table (Smart Contact Details)
 	for row in doc.smart_contact_details:
-		if row.value:
+		# Handle both dict and DocType objects
+		row_value = row.get('value') if isinstance(row, dict) else row.value
+		row_country_code = row.get('country_code') if isinstance(row, dict) else row.country_code
+		
+		if row_value:
 			# 1. Raw Value
-			search_index_parts.append(row.value)
+			search_index_parts.append(row_value)
 			
 			# 2. Normalized Value (Digits only)
-			clean_val = ''.join(filter(str.isdigit, row.value))
-			if clean_val != row.value:
+			clean_val = ''.join(filter(str.isdigit, row_value))
+			if clean_val != row_value:
 				search_index_parts.append(clean_val)
 				
 			# 3. Full International Number (if Country Code exists)
-			if row.country_code:
-				full_number = f"{row.country_code}{clean_val}"
+			if row_country_code:
+				full_number = f"{row_country_code}{clean_val}"
 				search_index_parts.append(full_number)
 				# Also add with plus if missing
 				if not full_number.startswith('+'):
@@ -329,8 +347,15 @@ def sync_contacts(doc, method):
 		search_blob = " | ".join(unique_parts)
 		
 		# No truncation needed for Text field
-		if doc.custom_search_index != search_blob:
-			doc.db_set('custom_search_index', search_blob)
+		# Check if field exists before setting
+		current_value = doc.get('custom_search_index', '')
+		if current_value != search_blob:
+			# Use db_set to avoid recursion and handle missing field gracefully
+			try:
+				doc.db_set('custom_search_index', search_blob)
+			except Exception:
+				# Field doesn't exist, skip it
+				pass
 
 	# 2. Sync to Standard 'Contact' Document
 	# This ensures all data (multiple numbers, social links) transfers to Customer/Contact
@@ -368,14 +393,15 @@ def sync_to_contact_doctype(lead_doc):
 		
 		# Map Smart Types to Contact Fields
 		for row in lead_doc.smart_contact_details:
-			val = row.value
-			type_map = row.type
+			val = row.get('value') if isinstance(row, dict) else row.value
+			type_map = row.get('type') if isinstance(row, dict) else row.type
+			row_country_code = row.get('country_code') if isinstance(row, dict) else row.country_code
 			
 			if type_map in ['Mobile', 'Phone', 'WhatsApp', 'Fax']:
 				# Handle Country Code
 				full_number = val
-				if row.country_code and not val.startswith('+'):
-					full_number = f"{row.country_code}{val}"
+				if row_country_code and not val.startswith('+'):
+					full_number = f"{row_country_code}{val}"
 				
 				contact.append("phone_nos", {
 					"phone": full_number,
@@ -400,13 +426,13 @@ def sync_address_doctype(lead_doc):
 	"""
 	try:
 		# Find Address Entries
-		address_rows = [row for row in lead_doc.smart_contact_details if row.type == 'Address']
+		address_rows = [row for row in lead_doc.smart_contact_details if (row.get('type') if isinstance(row, dict) else row.type) == 'Address']
 		
 		if not address_rows:
 			return
 
 		for idx, row in enumerate(address_rows):
-			raw_address = row.value
+			raw_address = row.get('value') if isinstance(row, dict) else row.value
 			if not raw_address: continue
 
 			# Unique ID/Title for this address
@@ -749,6 +775,493 @@ def log_interaction(lead_name, interaction_type, status, summary):
         "summary": summary
     })
     lead.save(ignore_permissions=True)
+
+@frappe.whitelist()
+def migrate_old_contacts_to_apex():
+	"""
+	Migrate contact data from old standard fields to Apex Contact Details automatically.
+	This function reads from: phone, mobile_no, email_id, whatsapp_no, fax, website,
+	custom_mobile_number_1, custom_mobile_number_2, custom_facebook
+	and adds them to smart_contact_details if they don't already exist.
+	"""
+	# Check permission: User must have write and export permission on Lead
+	if not (frappe.has_permission("Lead", "write") and frappe.has_permission("Lead", "export")):
+		frappe.throw(__("You don't have permission to migrate contacts. You need both 'Write' and 'Export' permissions on Lead."), frappe.PermissionError)
+	# Get all Leads with old contact data
+	leads = frappe.db.sql("""
+		SELECT 
+			name,
+			lead_name,
+			phone,
+			mobile_no,
+			email_id,
+			whatsapp_no,
+			fax,
+			website,
+			custom_mobile_number_1,
+			custom_mobile_number_2,
+			custom_facebook
+		FROM `tabLead`
+		WHERE (
+			(phone IS NOT NULL AND phone != '') OR
+			(mobile_no IS NOT NULL AND mobile_no != '') OR
+			(email_id IS NOT NULL AND email_id != '') OR
+			(whatsapp_no IS NOT NULL AND whatsapp_no != '') OR
+			(website IS NOT NULL AND website != '') OR
+			(fax IS NOT NULL AND fax != '') OR
+			(custom_mobile_number_1 IS NOT NULL AND custom_mobile_number_1 != '') OR
+			(custom_mobile_number_2 IS NOT NULL AND custom_mobile_number_2 != '') OR
+			(custom_facebook IS NOT NULL AND custom_facebook != '')
+		)
+		ORDER BY name
+	""", as_dict=True)
+	
+	if not leads:
+		return {
+			'success': 0,
+			'skipped': 0,
+			'total_leads': 0,
+			'message': 'لا توجد بيانات قديمة للانتقال'
+		}
+	
+	success_count = 0
+	skipped_count = 0
+	contacts_added = 0
+	errors = []
+	
+	# Default country code (can be customized)
+	default_country_code = '+20'
+	
+	total_leads = len(leads)
+	
+	for i, lead_data in enumerate(leads):
+		frappe.publish_progress(
+			float(i) / total_leads * 100,
+			title=_("Migrating Contacts"),
+			description=_("Processing Lead {0} of {1}: {2}").format(i + 1, total_leads, lead_data['lead_name'])
+		)
+		try:
+			lead = frappe.get_doc('Lead', lead_data['name'])
+			
+			# Initialize smart_contact_details if not exists
+			if not lead.smart_contact_details:
+				lead.smart_contact_details = []
+			
+			# Track contacts added for this lead
+			lead_contacts_added = 0
+			
+			# Helper function to check if contact already exists
+			def contact_exists(contact_type, contact_value):
+				if not contact_value or not contact_value.strip():
+					return True  # Skip empty values
+				
+				for existing in lead.smart_contact_details:
+					existing_type = existing.get('type') if isinstance(existing, dict) else existing.type
+					existing_value = existing.get('value') if isinstance(existing, dict) else existing.value
+					
+					# Normalize values for comparison (remove spaces, special chars for phones)
+					normalized_existing = ''.join(filter(str.isdigit, str(existing_value or '')))
+					normalized_new = ''.join(filter(str.isdigit, str(contact_value or '')))
+					
+					if existing_type == contact_type:
+						# For phone numbers, compare digits only
+						if contact_type in ['Mobile', 'Phone', 'WhatsApp', 'Fax']:
+							if normalized_existing == normalized_new and normalized_new:
+								return True
+						# For other types, exact match
+						elif str(existing_value or '').strip().lower() == str(contact_value or '').strip().lower():
+							return True
+				return False
+			
+			# Helper function to add contact if not exists
+			def add_contact_if_missing(contact_type, contact_value, country_code='', is_primary=0):
+				if not contact_value or not contact_value.strip():
+					return False
+				
+				if not contact_exists(contact_type, contact_value):
+					lead.append('smart_contact_details', {
+						'type': contact_type,
+						'country_code': country_code,
+						'value': contact_value.strip(),
+						'is_primary': is_primary
+					})
+					return True
+				return False
+			
+			# Migrate standard fields
+			# 1. Phone
+			if add_contact_if_missing('Phone', lead_data.get('phone'), default_country_code, 0):
+				lead_contacts_added += 1
+			
+			# 2. Mobile No (Primary)
+			if add_contact_if_missing('Mobile', lead_data.get('mobile_no'), default_country_code, 1):
+				lead_contacts_added += 1
+			
+			# 3. Email
+			if add_contact_if_missing('Email', lead_data.get('email_id'), '', 0):
+				lead_contacts_added += 1
+			
+			# 4. WhatsApp
+			if add_contact_if_missing('WhatsApp', lead_data.get('whatsapp_no'), default_country_code, 0):
+				lead_contacts_added += 1
+			
+			# 5. Website
+			if add_contact_if_missing('Website', lead_data.get('website'), '', 0):
+				lead_contacts_added += 1
+			
+			# 6. Fax
+			if add_contact_if_missing('Fax', lead_data.get('fax'), default_country_code, 0):
+				lead_contacts_added += 1
+			
+			# 7. Custom Mobile Number 1
+			if add_contact_if_missing('Mobile', lead_data.get('custom_mobile_number_1'), default_country_code, 0):
+				lead_contacts_added += 1
+			
+			# 8. Custom Mobile Number 2
+			if add_contact_if_missing('Mobile', lead_data.get('custom_mobile_number_2'), default_country_code, 0):
+				lead_contacts_added += 1
+			
+			# 9. Custom Facebook
+			if add_contact_if_missing('Facebook', lead_data.get('custom_facebook'), '', 0):
+				lead_contacts_added += 1
+			
+			# Save only if we added contacts
+			if lead_contacts_added > 0:
+				lead.save(ignore_permissions=True)
+				success_count += 1
+				contacts_added += lead_contacts_added
+			else:
+				skipped_count += 1
+				
+		except Exception as e:
+			error_msg = f"خطأ في Lead {lead_data.get('name')}: {str(e)}"
+			errors.append(error_msg)
+			frappe.log_error(f"Migration error for {lead_data.get('name')}: {str(e)}", "Apex CRM Migration")
+			skipped_count += 1
+	
+	frappe.db.commit()
+	
+	return {
+		'success': success_count,
+		'skipped': skipped_count,
+		'total_leads': len(leads),
+		'contacts_added': contacts_added,
+		'error_list': errors[:20] if errors else []
+	}
+
+@frappe.whitelist()
+def export_apex_contacts_to_excel():
+	"""
+	Export all Apex Contact Details to Excel format.
+	Returns file path for download.
+	"""
+	# Check permission: User must have export permission on Lead (or read as fallback)
+	if not (frappe.has_permission("Lead", "export") or frappe.has_permission("Lead", "read")):
+		frappe.throw(__("You don't have permission to export contacts. You need 'Export' or 'Read' permission on Lead."), frappe.PermissionError)
+	from frappe.utils.xlsxutils import make_xlsx
+	from frappe.utils import get_site_path
+	import os
+	
+	# Get all Apex Contact Details
+	contacts = frappe.db.sql("""
+		SELECT 
+			acd.parent as lead_id,
+			l.lead_name,
+			acd.type,
+			acd.country_code,
+			acd.value,
+			acd.is_primary
+		FROM `tabApex Contact Detail` acd
+		INNER JOIN `tabLead` l ON acd.parent = l.name
+		WHERE acd.parenttype = 'Lead'
+		ORDER BY acd.parent, acd.idx
+	""", as_dict=True)
+	
+	# Prepare data for Excel
+	data = [['Lead ID', 'Lead Name', 'Type', 'Country Code', 'Value', 'Is Primary']]
+	
+	for contact in contacts:
+		data.append([
+			contact.get('lead_id', ''),
+			contact.get('lead_name', ''),
+			contact.get('type', ''),
+			contact.get('country_code', ''),
+			contact.get('value', ''),
+			1 if contact.get('is_primary') else 0
+		])
+	
+	# Create Excel file
+	xlsx_data = make_xlsx(data, "Apex Contacts Export")
+	
+	# Save to site folder
+	site_path = get_site_path()
+	# Format datetime as string for filename
+	timestamp = frappe.utils.now_datetime().strftime('%Y-%m-%d_%H-%M-%S')
+	file_name = f"apex_contacts_export_{timestamp}.xlsx"
+	file_path = os.path.join(site_path, 'public', 'files', file_name)
+	
+	# Ensure directory exists
+	os.makedirs(os.path.dirname(file_path), exist_ok=True)
+	
+	with open(file_path, 'wb') as f:
+		f.write(xlsx_data.getvalue())
+	
+	# Return file URL for download
+	file_url = f"/files/{file_name}"
+	
+	return {
+		'file_url': file_url,
+		'file_path': file_path,
+		'total_records': len(contacts)
+	}
+
+@frappe.whitelist()
+def get_apex_crm_button_permissions():
+	"""
+	Get custom permissions for Apex CRM buttons.
+	Checks Role Permissions for Lead DocType and returns permissions for each button.
+	
+	Returns:
+		dict: {
+			'duplicate_manager': bool,
+			'migrate_contacts': bool,
+			'export_contacts': bool,
+			'import_contacts': bool
+		}
+	"""
+	permissions = {
+		'duplicate_manager': False,
+		'migrate_contacts': False,
+		'export_contacts': False,
+		'import_contacts': False
+	}
+	
+	# Get user roles
+	user_roles = frappe.get_roles()
+	
+	# Get Lead DocType permissions
+	lead_perms = frappe.get_all("DocPerm",
+		filters={"parent": "Lead", "role": ["in", user_roles]},
+		fields=["role", "read", "write", "export", "import"]
+	)
+	
+
+	for perm in lead_perms:
+		if perm.export:
+			permissions['export_contacts'] = True
+		if perm.get('import', 0):
+			permissions['import_contacts'] = True
+	
+	# Fallback/Supplemental Checks
+	if not permissions['migrate_contacts']:
+		# Requirement: Write AND Export
+		permissions['migrate_contacts'] = frappe.has_permission("Lead", "write") and frappe.has_permission("Lead", "export")
+	
+	if not permissions['export_contacts']:
+		permissions['export_contacts'] = frappe.has_permission("Lead", "export") or frappe.has_permission("Lead", "read")
+	if not permissions['import_contacts']:
+		permissions['import_contacts'] = frappe.has_permission("Lead", "import") or frappe.has_permission("Lead", "write")
+	
+	# Duplicate Manager: Link to Page Permission ('duplicate-manager')
+	# This allows controlling button visibility via 'Role Permissions Manager' > 'Page'
+	permissions['duplicate_manager'] = has_page_permission('duplicate-manager')
+	
+	return permissions
+
+def has_page_permission(page_name):
+	"""
+	Checks if the current user has access to a specific Page.
+	"""
+	if "System Manager" in frappe.get_roles():
+		return True
+		
+	roles = frappe.get_roles()
+	allowed_roles = frappe.db.get_all('Has Role', 
+		filters={'parent': page_name, 'parenttype': 'Page', 'role': ['in', roles]}, 
+		fields=['role'],
+		ignore_permissions=True
+	)
+	
+	return len(allowed_roles) > 0
+
+@frappe.whitelist()
+def import_apex_contacts_from_excel():
+	"""
+	Import Apex Contact Details from Excel file.
+	
+	Expected Excel format:
+	- Columns: Lead ID, Lead Name, Type, Country Code, Value, Is Primary
+	- First row is header (will be skipped)
+	
+	This method is called by FileUploader, which provides the file via frappe.local.uploaded_file
+	"""
+	# Check permission: User must have import permission on Lead (or write as fallback)
+	if not (frappe.has_permission("Lead", "import") or frappe.has_permission("Lead", "write")):
+		frappe.throw(__("You don't have permission to import contacts. You need 'Import' or 'Write' permission on Lead."), frappe.PermissionError)
+	import os
+	from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
+	
+	# Get file content from FileUploader
+	file_content = None
+	file_path = None
+	
+	# Method 1: FileUploader provides content via frappe.local.uploaded_file
+	if hasattr(frappe.local, 'uploaded_file') and frappe.local.uploaded_file:
+		file_content = frappe.local.uploaded_file
+		file_name = getattr(frappe.local, 'uploaded_filename', 'import.xlsx')
+	
+	# Method 2: File URL (if file was already uploaded)
+	elif hasattr(frappe.local, 'uploaded_file_url') and frappe.local.uploaded_file_url:
+		file_url = frappe.local.uploaded_file_url
+		file_path = frappe.utils.file_manager.get_file_path(file_url)
+		if not os.path.exists(file_path):
+			frappe.throw(f"الملف غير موجود: {file_path}")
+	
+	# Method 3: Check if file_path was passed as parameter (backward compatibility)
+	elif frappe.form_dict.get('file_path'):
+		file_path = frappe.form_dict.file_path
+		if file_path.startswith('/files/'):
+			from frappe.utils import get_site_path
+			site_path = get_site_path()
+			file_path = os.path.join(site_path, 'public', file_path.lstrip('/'))
+		
+		if not os.path.exists(file_path):
+			frappe.throw(f"الملف غير موجود: {file_path}")
+	
+	else:
+		frappe.throw("يرجى تحديد ملف للاستيراد")
+	
+	try:
+		# Read Excel file using Frappe utils (no pandas needed)
+		if file_content:
+			# Read from memory
+			rows = read_xlsx_file_from_attached_file(fcontent=file_content)
+		else:
+			# Read from file path
+			rows = read_xlsx_file_from_attached_file(filepath=file_path)
+		
+		if not rows or len(rows) < 2:
+			frappe.throw("الملف فارغ أو لا يحتوي على بيانات")
+		
+		# First row is header
+		header_row = [str(cell).strip() if cell else '' for cell in rows[0]]
+		header_lower = {str(cell).lower().strip() if cell else '': i for i, cell in enumerate(rows[0])}
+		
+		# Validate required columns
+		required_columns = ['Lead ID', 'Type', 'Value']
+		missing_columns = []
+		column_indices = {}
+		
+		for req_col in required_columns:
+			req_col_lower = req_col.lower()
+			if req_col_lower in header_lower:
+				column_indices[req_col] = header_lower[req_col_lower]
+			else:
+				missing_columns.append(req_col)
+		
+		if missing_columns:
+			frappe.throw(f"الأعمدة المطلوبة مفقودة: {', '.join(missing_columns)}. الأعمدة الموجودة: {', '.join(header_row)}")
+		
+		# Get optional column indices
+		optional_columns = {
+			'Country Code': header_lower.get('country code'),
+			'Is Primary': header_lower.get('is primary')
+		}
+		
+		# Process data
+		success_count = 0
+		error_count = 0
+		errors = []
+		leads_processed = {}
+		
+		# Group rows by Lead ID
+		for row_idx, row in enumerate(rows[1:], start=2):  # Skip header
+			if not row or len(row) <= column_indices['Lead ID']:
+				continue
+			
+			lead_id = str(row[column_indices['Lead ID']]).strip() if row[column_indices['Lead ID']] else ''
+			if not lead_id:
+				continue
+			
+			# Group by Lead ID
+			if lead_id not in leads_processed:
+				leads_processed[lead_id] = []
+			leads_processed[lead_id].append(row)
+		
+		# Process each Lead
+		for lead_id, lead_rows in leads_processed.items():
+			try:
+				# Check if Lead exists
+				if not frappe.db.exists('Lead', lead_id):
+					error_count += 1
+					errors.append(f"Lead {lead_id} غير موجود")
+					continue
+				
+				# Get Lead document
+				lead = frappe.get_doc('Lead', lead_id)
+				
+				# Initialize smart_contact_details if not exists
+				if not lead.smart_contact_details:
+					lead.smart_contact_details = []
+				
+				# Process each contact row for this lead
+				for row in lead_rows:
+					contact_type = str(row[column_indices['Type']]).strip() if len(row) > column_indices['Type'] and row[column_indices['Type']] else 'Other'
+					contact_value = str(row[column_indices['Value']]).strip() if len(row) > column_indices['Value'] and row[column_indices['Value']] else ''
+					
+					if not contact_value:
+						continue
+					
+					# Get optional fields
+					country_code = ''
+					if optional_columns['Country Code'] is not None and len(row) > optional_columns['Country Code']:
+						country_code = str(row[optional_columns['Country Code']]).strip() if row[optional_columns['Country Code']] else ''
+					
+					is_primary = 0
+					if optional_columns['Is Primary'] is not None and len(row) > optional_columns['Is Primary']:
+						primary_val = row[optional_columns['Is Primary']]
+						is_primary = 1 if (primary_val == 1 or str(primary_val).lower() in ['1', 'true', 'yes']) else 0
+					
+					# Check for duplicates
+					existing = False
+					for existing_contact in lead.smart_contact_details:
+						existing_type = existing_contact.get('type') if isinstance(existing_contact, dict) else existing_contact.type
+						existing_value = existing_contact.get('value') if isinstance(existing_contact, dict) else existing_contact.value
+						
+						if existing_type == contact_type and existing_value == contact_value:
+							existing = True
+							break
+					
+					if not existing:
+						lead.append('smart_contact_details', {
+							'type': contact_type,
+							'country_code': country_code,
+							'value': contact_value,
+							'is_primary': is_primary
+						})
+				
+				# Save Lead
+				lead.save(ignore_permissions=True)
+				success_count += 1
+				
+			except Exception as e:
+				error_count += 1
+				error_msg = f"خطأ في Lead {lead_id}: {str(e)}"
+				errors.append(error_msg)
+				frappe.log_error(f"Import error for {lead_id}: {str(e)}")
+		
+		frappe.db.commit()
+		
+		return {
+			'success': success_count,
+			'errors': error_count,
+			'total_leads': len(leads_processed),
+			'error_list': errors[:20]  # First 20 errors
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Excel import failed: {str(e)}", "Apex CRM Import Error")
+		frappe.throw(f"فشل استيراد الملف: {str(e)}")
 
 
 
