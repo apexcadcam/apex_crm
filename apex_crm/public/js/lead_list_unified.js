@@ -609,6 +609,200 @@ function setupLeadCardView(listview) {
         }, 1000);
     };
 
+    // 5. HELPER DIALOGS FOR LINKED DOCS (Mobile Friendly)
+
+    // TASKS
+    window.apex_crm_show_tasks = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Tasks: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_tasks', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No open tasks</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'ToDo', '${item.name}')" style="cursor:pointer;">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${item.description || 'No Description'}</h6>
+                                <small>${frappe.datetime.str_to_user(item.date)}</small>
+                            </div>
+                            <small class="text-muted">Status: ${item.status}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+
+                // Add Create Button
+                html += `<div style="padding:10px; border-top:1px solid #eee; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="frappe.new_doc('ToDo', {reference_type:'Lead', reference_name:'${lead}'})">Create Task</button>
+                </div>`;
+
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // EVENTS
+    window.apex_crm_show_events = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Events: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_events', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No upcoming events</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'Event', '${item.name}')" style="cursor:pointer;">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${item.subject}</h6>
+                                <small>${frappe.datetime.str_to_user(item.starts_on)}</small>
+                            </div>
+                            <small>${item.event_type}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+                // Add Create Button
+                html += `<div style="padding:10px; border-top:1px solid #eee; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="frappe.new_doc('Event')">Create Event</button>
+                </div>`;
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // QUOTES
+    window.apex_crm_show_quotes = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Quotations: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_quotations', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No quotations found</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'Quotation', '${item.name}')" style="cursor:pointer;">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${item.name}</h6>
+                                <small>${formatCurrency(item.grand_total, item.currency)}</small>
+                            </div>
+                            <small class="text-muted">${item.status}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+                // Add Create Button
+                html += `<div style="padding:10px; border-top:1px solid #eee; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="frappe.new_doc('Quotation', {quotation_to:'Lead', party_name:'${lead}'})">Create Quote</button>
+                </div>`;
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // PROSPECTS
+    window.apex_crm_show_prospects = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Prospects: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_prospects', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No linked prospects</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'Prospect', '${item.name}')" style="cursor:pointer;">
+                            <h6 class="mb-1">${item.company_name || item.name}</h6>
+                            <small>${item.industry || ''}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+
+                // Add Create Button
+                html += `<div style="padding:10px; border-top:1px solid #eee; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="frappe.new_doc('Prospect')">Create Prospect</button>
+                </div>`;
+
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // OPPORTUNITIES
+    window.apex_crm_show_opportunities = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Opportunities: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_opportunities', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No opportunities found</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'Opportunity', '${item.name}')" style="cursor:pointer;">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${item.name}</h6>
+                                <small>${formatCurrency(item.opportunity_amount, item.currency)}</small>
+                            </div>
+                            <small class="text-muted">${item.status}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+                // Add Create Button
+                html += `<div style="padding:10px; border-top:1px solid #eee; text-align:center;">
+                    <button class="btn btn-sm btn-primary" onclick="frappe.new_doc('Opportunity', {opportunity_from:'Lead', party_name:'${lead}'})">Create Opportunity</button>
+                </div>`;
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // CUSTOMERS
+    window.apex_crm_show_customers = function (lead) {
+        const d = new frappe.ui.Dialog({ title: __('Customers: ' + lead), fields: [{ fieldname: 'html', fieldtype: 'HTML' }] });
+        d.fields_dict.html.$wrapper.html('<div class="text-center text-muted p-3">Loading...</div>');
+        frappe.call({
+            method: 'apex_crm.api.get_linked_customers', args: { lead: lead },
+            callback: (r) => {
+                const data = r.message || [];
+                let html = '<div class="list-group list-group-flush" style="max-height:60vh; overflow-y:auto;">';
+                if (!data.length) html += '<div class="text-center text-muted p-4">No linked customers</div>';
+                else {
+                    data.forEach(item => {
+                        html += `<div class="list-group-item" onclick="frappe.set_route('Form', 'Customer', '${item.name}')" style="cursor:pointer;">
+                            <h6 class="mb-1">${item.customer_name}</h6>
+                            <small class="text-muted">${item.customer_group}</small>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+                d.fields_dict.html.$wrapper.html(html);
+            }
+        });
+        d.show();
+    };
+
+    // Currency Flag Helper
+    const formatCurrency = (amount, currency) => {
+        return (amount || 0).toLocaleString('en-US', { style: 'currency', currency: currency || 'EGP' });
+    };
+
+
     const formatDateTime = (dateStr) => { if (!dateStr) return ''; const d = new Date(dateStr); const now = new Date(); const diff = (now - d) / 1000; const timeString = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }); if (diff < 86400 && d.getDate() === now.getDate()) return `Today ${timeString}`; else if (diff < 172800 && d.getDate() === now.getDate() - 1) return `Yesterday ${timeString}`; return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + timeString; };
     const renderMobileWithFlag = (doc) => { const mobile = doc.mobile_no || doc.phone; if (!mobile) return '<span style="color:#9ca3af">No Mobile</span>'; let countryCode = 'eg'; if ((mobile.startsWith('+20') || mobile.startsWith('01')) && mobile.length > 9) countryCode = 'eg'; const flags = { 'eg': '🇪🇬' }; const flag = flags[countryCode] || '🏳️'; return `<span style="margin-right:6px; font-size:16px;">${flag}</span><span>${mobile}</span>`; };
 
@@ -618,11 +812,11 @@ function setupLeadCardView(listview) {
         $('.apex-status-popover').remove();
 
         const statusColors = {
-            'Open': 'blue',
-            'Replied': 'green',
-            'Interested': 'purple',
+            'Open': 'red',
+            'Replied': 'blue',
+            'Interested': 'yellow',
             'Converted': 'green',
-            'Lost Quotation': 'red',
+            'Lost Quotation': 'black',
             'Do Not Contact': 'red',
             'Lead': 'gray',
             'Opportunity': 'orange'
@@ -932,8 +1126,18 @@ function setupLeadCardView(listview) {
 
         const initials = frappe.get_abbr(lead_name);
         const last_updated = doc.modified ? formatDateTime(doc.modified) : '';
-        const statusColors = { 'Open': 'blue', 'Replied': 'green', 'Interested': 'purple', 'Converted': 'green', 'Lost Quotation': 'red', 'Do Not Contact': 'red', 'Lead': 'gray', 'Opportunity': 'orange' };
-        const statusColor = statusColors[status] || 'gray';
+        // Status Color Mapping (Direct CSS Values)
+        const statusColors = {
+            'Open': '#dc2626', // Red
+            'Replied': '#2563eb', // Blue
+            'Interested': '#eab308', // Yellow
+            'Converted': '#16a34a', // Green
+            'Lost Quotation': '#000000', // Black
+            'Do Not Contact': '#dc2626', // Red
+            'Lead': '#6b7280', // Gray
+            'Opportunity': '#f97316' // Orange
+        };
+        const statusColorValue = statusColors[status] || '#6b7280';
 
         return `
             <div class="apex-premium-card" id="lead-card-${doc.name}" data-name="${doc.name}" data-current-mobile="${mobile}" onclick="frappe.set_route('Form', 'Lead', '${doc.name}')">
@@ -952,7 +1156,6 @@ function setupLeadCardView(listview) {
                             </div>
                             
                             <!-- New Fields: Owner, Type, Request -->
-                            <!-- New Fields: Owner, Type, Request -->
                             <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; margin-bottom: 2px;">
                                 ${doc.lead_owner ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.lead_owner}</span>` : ''}
                                 ${doc.type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.type}</span>` : ''}
@@ -962,9 +1165,9 @@ function setupLeadCardView(listview) {
                     </div>
                     
                     <!-- Status Badge (Clickable) -->
-                    <div class="card-status-badge status-${statusColor}" 
+                    <div class="card-status-badge" 
                          onclick="event.stopPropagation(); window.apex_crm_show_status_popover(event, '${doc.name}', '${status}');"
-                         style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                         style="cursor: pointer; display: flex; align-items: center; gap: 4px; color: ${statusColorValue}; font-weight: 700; font-size: 12px; text-transform: uppercase;">
                         ${status} <i class="fa fa-caret-down" style="opacity: 0.6; font-size: 10px;"></i>
                     </div>
                 </div>
@@ -999,18 +1202,18 @@ function setupLeadCardView(listview) {
 
                 <div class="card-info-body">
                     <div class="info-pill pill-notes" onclick="event.stopPropagation(); window.apex_crm_show_notes('${doc.name}');"><i class="fa fa-sticky-note"></i> Notes <span class="count-notes">0</span></div>
-                    <div class="info-pill pill-tasks" onclick="event.stopPropagation(); frappe.set_route('List', 'ToDo', {'reference_type': 'Lead', 'reference_name': '${doc.name}'});"><i class="fa fa-check-square"></i> Tasks <span class="count-tasks">0</span></div>
+                    <div class="info-pill pill-tasks" onclick="event.stopPropagation(); window.apex_crm_show_tasks('${doc.name}');"><i class="fa fa-check-square"></i> Tasks <span class="count-tasks">0</span></div>
                     
-                    <!-- Event: Smart Filter -->
-                    <div class="info-pill pill-events" onclick="event.stopPropagation(); window.apex_crm_route_to_list('Event', [['Event Participants', 'reference_docname', '=', '${doc.name}']] );"><i class="fa fa-calendar"></i> Events <span class="count-events">0</span></div>
+                    <!-- Event: Dialog -->
+                    <div class="info-pill pill-events" onclick="event.stopPropagation(); window.apex_crm_show_events('${doc.name}');"><i class="fa fa-calendar"></i> Events <span class="count-events">0</span></div>
                     
-                    <div class="info-pill pill-quotes" onclick="event.stopPropagation(); frappe.set_route('List', 'Quotation', {'quotation_to': 'Lead', 'party_name': '${doc.name}'});"><i class="fa fa-file-text"></i> Quotes <span class="count-quotes">0</span></div>
+                    <div class="info-pill pill-quotes" onclick="event.stopPropagation(); window.apex_crm_show_quotes('${doc.name}');"><i class="fa fa-file-text"></i> Quotes <span class="count-quotes">0</span></div>
                     
-                    <!-- Prospect: SMART Fetch & Filter -->
-                    <div class="info-pill pill-prospects" onclick="event.stopPropagation(); window.apex_crm_route_to_prospects('${doc.name}');"><i class="fa fa-users"></i> Prosp <span class="count-prospects">0</span></div>
+                    <!-- Prospect: Dialog -->
+                    <div class="info-pill pill-prospects" onclick="event.stopPropagation(); window.apex_crm_show_prospects('${doc.name}');"><i class="fa fa-users"></i> Prosp <span class="count-prospects">0</span></div>
                     
-                    <div class="info-pill pill-opportunities" onclick="event.stopPropagation(); frappe.set_route('List', 'Opportunity', {'opportunity_from': 'Lead', 'party_name': '${doc.name}'});"><i class="fa fa-lightbulb-o"></i> Opp <span class="count-opportunities">0</span></div>
-                    <div class="info-pill pill-customers" onclick="event.stopPropagation(); frappe.set_route('List', 'Customer', {'lead_name': '${doc.name}'});"><i class="fa fa-user-circle"></i> Cust <span class="count-customers">0</span></div>
+                    <div class="info-pill pill-opportunities" onclick="event.stopPropagation(); window.apex_crm_show_opportunities('${doc.name}');"><i class="fa fa-lightbulb-o"></i> Opp <span class="count-opportunities">0</span></div>
+                    <div class="info-pill pill-customers" onclick="event.stopPropagation(); window.apex_crm_show_customers('${doc.name}');"><i class="fa fa-user-circle"></i> Cust <span class="count-customers">0</span></div>
                 </div>
                 
                 <!-- CLICKABLE INTERACTION FOOTER -->

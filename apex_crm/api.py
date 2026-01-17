@@ -568,15 +568,7 @@ def sync_contacts(doc, method):
 			if interaction.summary:
 				search_index_parts.append(interaction.summary)
 
-	# F. [NEW] Include Apex Interaction Logs (Linked DocType)
-	# Fetch logs where this lead is the reference
-	interaction_logs = frappe.get_all("Apex Interaction Log", 
-		filters={"reference_doctype": "Lead", "reference_docname": doc.name},
-		fields=["summary"])
-	
-	for log in interaction_logs:
-		if log.summary:
-			search_index_parts.append(log.summary)
+
 
 	if search_index_parts:
 		# Deduplicate and Join
