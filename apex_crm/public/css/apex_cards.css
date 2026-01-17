@@ -1,5 +1,26 @@
 /* apex_cards.css - Premium Mobile Cards & Dashboard */
 
+/* CRITICAL: Force horizontal scroll for info pills on all devices */
+.apex-premium-card .card-info-body,
+.card-info-body {
+    overflow-x: scroll !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x pinch-zoom !important;
+    scroll-behavior: smooth;
+    /* Prevent any wrapping */
+    flex-wrap: nowrap !important;
+    flex-direction: row !important;
+}
+
+/* Ensure info pills never wrap or shrink */
+.info-pill {
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-basis: auto !important;
+    min-width: max-content !important;
+}
+
 /* 1. Card Container */
 .apex-premium-card {
     background: #ffffff;
@@ -90,18 +111,49 @@
 /* 4. Rich Info Body (Collapsed View Details) */
 .card-info-body {
     padding: 8px 14px 12px 14px;
-    display: flex;
-    flex-wrap: nowrap;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    flex-direction: row !important;
     gap: 10px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: scroll !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
     scrollbar-width: thin;
     scrollbar-color: #d1d5db transparent;
+    /* CRITICAL: Force horizontal scroll on mobile */
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+    /* Prevent any wrapping */
+    align-items: center;
+}
+
+/* Mobile-specific styles for better scrolling */
+@media (max-width: 768px) {
+    .card-info-body {
+        padding: 12px 10px 16px 10px;
+        gap: 14px;
+        /* Ensure scroll works on touch devices */
+        touch-action: pan-x pinch-zoom !important;
+        -webkit-overflow-scrolling: touch !important;
+        overflow-x: scroll !important;
+        overflow-y: hidden !important;
+        /* Force scrollbar to be visible on mobile */
+        scrollbar-width: auto;
+        /* Ensure no wrapping */
+        flex-wrap: nowrap !important;
+        flex-direction: row !important;
+    }
 }
 
 .card-info-body::-webkit-scrollbar {
     height: 6px;
+}
+
+@media (max-width: 768px) {
+    .card-info-body::-webkit-scrollbar {
+        height: 8px;
+    }
 }
 
 .card-info-body::-webkit-scrollbar-track {
@@ -136,7 +188,7 @@
 
 /* Info Pills - Larger, Scrollable Buttons */
 .info-pill {
-    display: inline-flex;
+    display: inline-flex !important;
     align-items: center;
     gap: 6px;
     font-size: 13px;
@@ -146,9 +198,44 @@
     border: 1px solid transparent;
     cursor: pointer;
     transition: all 0.15s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
-    min-width: fit-content;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    /* CRITICAL: Set minimum width to prevent shrinking */
+    min-width: max-content;
+    width: auto;
+    /* Prevent any wrapping or shrinking */
+    flex: 0 0 auto !important;
+}
+
+/* Mobile: Larger buttons for better touch interaction */
+@media (max-width: 768px) {
+    .info-pill {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        padding: 14px 20px !important;
+        gap: 8px;
+        min-width: 100px !important;
+        /* Ensure buttons don't shrink */
+        flex: 0 0 auto !important;
+        /* Larger touch target */
+        min-height: 44px;
+    }
+    
+    .info-pill i {
+        font-size: 18px !important;
+    }
+    
+    .info-pill .count-notes,
+    .info-pill .count-tasks,
+    .info-pill .count-events,
+    .info-pill .count-quotes,
+    .info-pill .count-prospects,
+    .info-pill .count-opportunities,
+    .info-pill .count-customers {
+        font-weight: 700 !important;
+        font-size: 16px !important;
+        margin-left: 4px;
+    }
 }
 
 .info-pill:hover {

@@ -2796,13 +2796,34 @@ def get_lead_contact_details(lead):
 	doc = frappe.get_doc("Lead", lead)
 	details = []
 	
-	# 1. Standard Fields (Unique check)
-	seen_values = set()
+	# Deduplication sets
+	seen_keys = set()
 	
-	def add_detail(dtype, value, icon):
-		if value and value not in seen_values:
-			details.append({"type": dtype, "value": value, "icon": icon, "source": "Main"})
-			seen_values.add(value)
+	import re
+	
+	def get_normalization_key(dtype, value):
+		if not value: return ""
+		val = str(value).strip().lower()
+		
+		# Phone/Mobile/WhatsApp: Strip strictly to digits
+		if dtype in ['Mobile', 'Phone', 'WhatsApp', 'Fax']:
+			return re.sub(r'\D', '', val)
+			
+		# Website: Strip protocol and www
+		if dtype == 'Website':
+			return val.replace('http://', '').replace('https://', '').replace('www.', '').strip('/')
+			
+		return val
+
+	def add_detail(dtype, value, icon, source="Main"):
+		if not value: return
+		
+		norm_key = get_normalization_key(dtype, value)
+		unique_key = (dtype, norm_key)
+		
+		if unique_key not in seen_keys:
+			details.append({"type": dtype, "value": value, "icon": icon, "source": source})
+			seen_keys.add(unique_key)
 	
 	add_detail("Email", doc.email_id, "envelope")
 	add_detail("Mobile", doc.mobile_no, "mobile")
@@ -2817,8 +2838,8 @@ def get_lead_contact_details(lead):
 		add_detail("Address", addr, "map-marker")
 
 	# 2. Child Table (Apex Contact Details)
-	if doc.get("apex_contact_details"):
-		for row in doc.apex_contact_details:
+	if doc.get("smart_contact_details"):
+		for row in doc.smart_contact_details:
 			# Map Type to Icon
 			icon = "circle"
 			t = (row.type or "").lower()
@@ -2842,16 +2863,6 @@ def get_lead_contact_details(lead):
 			if row.country_code and val and row.type in ['Mobile', 'Phone', 'WhatsApp'] and not val.startswith('+'):
 				val = f"{row.country_code}{val}"
 			
-			if val and val not in seen_values:
-				details.append({
-					"type": row.type,
-					"value": val,
-					"icon": icon,
-					"source": "Child Table",
-					"is_primary": row.is_primary
-				})
-				seen_values.add(val)
+			add_detail(row.type, val, icon, "Child Table")
 				
 	return details
-
-

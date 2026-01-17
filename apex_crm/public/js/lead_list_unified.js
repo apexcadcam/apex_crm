@@ -60,7 +60,7 @@ window.apex_crm_list = {
 };
 
 frappe.listview_settings['Lead'] = {
-    add_fields: ['mobile_no', 'title', 'company', 'status', 'email_id', 'city', 'state', 'country', 'territory', 'lead_name', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index'],
+    add_fields: ['mobile_no', 'title', 'company', 'status', 'email_id', 'city', 'state', 'country', 'territory', 'lead_name', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index', 'lead_owner', 'type', 'request_type'],
 
     formatters: {
         smart_contact_summary: function (value, doc) {
@@ -138,7 +138,8 @@ frappe.listview_settings['Lead'] = {
 
     onload: function (listview) {
         // Mobile Card View - Initial Load
-        setupLeadCardView(listview);
+        // Ensure strictly called after standard load
+        setTimeout(() => setupLeadCardView(listview), 100);
 
         // Dynamic Resize Handler (Debounced)
         if (!window.lead_list_resize_observer) {
@@ -161,11 +162,14 @@ frappe.listview_settings['Lead'] = {
 
     refresh: function (listview) {
         // Mobile Card View - Refresh
-        setupLeadCardView(listview);
-        // Ensure buttons are present on refresh too
-        setupApexCRMButtons(listview);
-        // Ensure Search Bar is present
-        setupUniversalSearchBar(listview);
+        // Use timeout to ensure it overrides any framework reset
+        setTimeout(() => {
+            setupLeadCardView(listview);
+            // Ensure buttons are present on refresh too
+            setupApexCRMButtons(listview);
+            // Ensure Search Bar is present
+            setupUniversalSearchBar(listview);
+        }, 100);
     }
 };
 
@@ -311,7 +315,8 @@ function setupLeadCardView(listview) {
     // 0. MOBILE GUARD (SAFE CHECK)
     const is_mobile = () => {
         // Return true only for smaller screens (Tablets/Phones)
-        return window.innerWidth <= 992;
+        // Check both window width and user agent to be safe on mobile devices
+        return window.innerWidth <= 992 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     };
 
     // Explicitly handle Desktop/Mobile visibility
@@ -351,7 +356,7 @@ function setupLeadCardView(listview) {
                 'visibility': 'visible',
                 'opacity': '1'
             });
-            
+
             // Position in .frappe-list if not already there
             const $frappeList = $('.frappe-list').first();
             if ($frappeList.length && !$frappeList[0].contains($searchBar[0])) {
@@ -373,7 +378,7 @@ function setupLeadCardView(listview) {
 
     // Clean up Desktop Artifacts for Mobile
     $('.list-row-filters').hide(); // Hides ID/Title input row
-    
+
     // CRITICAL: Inject CSS to completely hide ID/Title fields in mobile
     const mobileIDFieldCSS = 'apex-mobile-id-field-hide';
     if ($(`#${mobileIDFieldCSS}`).length === 0) {
@@ -399,7 +404,7 @@ function setupLeadCardView(listview) {
             </style>
         `);
     }
-    
+
     // CRITICAL: Prevent ID/Title fields from receiving input in mobile
     // Disable and hide ID/Title fields completely to prevent text from appearing there
     const disableIDFields = () => {
@@ -423,79 +428,14 @@ function setupLeadCardView(listview) {
             .val('')
             .blur();
     };
-    
+
     // Disable immediately
     disableIDFields();
-    
-    // CRITICAL: Monitor and clear ID/Title fields continuously in mobile
-    const idFieldMonitor = setInterval(() => {
-        if (is_mobile()) {
-            const $idFields = $('.list-row-filters input, .list-row-head input');
-            if ($idFields.length) {
-                $idFields.each(function() {
-                    const $field = $(this);
-                    if ($field.val()) {
-                        // CRITICAL: Clear value and remove focus
-                        $field.val('').blur();
-                        // Force disable again
-                        $field.prop('disabled', true)
-                            .attr('readonly', true)
-                            .attr('tabindex', '-1')
-                            .off('focus blur input keydown keypress keyup change');
-                        
-                        // Force focus back to search input
-                        const $searchInput = $('#lead-search-input');
-                        if ($searchInput.length && $searchInput.is(':visible')) {
-                            setTimeout(() => {
-                                $searchInput.focus();
-                                const len = $searchInput.val().length;
-                                if ($searchInput[0] && $searchInput[0].setSelectionRange) {
-                                    $searchInput[0].setSelectionRange(len, len);
-                                }
-                            }, 10);
-                        }
-                    }
-                });
-                disableIDFields();
-            }
-        } else {
-            clearInterval(idFieldMonitor);
-        }
-    }, 50); // Check every 50ms for faster response
-    
-    // CRITICAL: MutationObserver to watch for changes in ID fields
-    const idFieldObserver = new MutationObserver((mutations) => {
-        if (!is_mobile()) return;
-        
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'childList' || mutation.type === 'attributes') {
-                const $idFields = $('.list-row-filters input');
-                if ($idFields.length) {
-                    $idFields.each(function() {
-                        if ($(this).val()) {
-                            $(this).val('').blur();
-                            const $searchInput = $('#lead-search-input');
-                            if ($searchInput.length && $searchInput.is(':visible')) {
-                                setTimeout(() => $searchInput.focus(), 10);
-                            }
-                        }
-                    });
-                    disableIDFields();
-                }
-            }
-        });
-    });
-    
-    // Observe the list-row-filters container
-    const $filtersContainer = $('.list-row-filters');
-    if ($filtersContainer.length) {
-        idFieldObserver.observe($filtersContainer[0], {
-            childList: true,
-            attributes: true,
-            attributeFilter: ['value', 'disabled', 'readonly'],
-            subtree: true
-        });
-    }
+
+    // Mobile Input Safety
+    // Disable inputs initially
+    $('.list-row-filters input, .list-row-head input').prop('disabled', true).hide();
+
 
 
     // 1. DATA FETCHING
@@ -558,7 +498,22 @@ function setupLeadCardView(listview) {
                 d2.show();
                 d2.set_primary_action('Save', function () {
                     const values = d2.get_values(); if (!values) return;
-                    frappe.call({ method: 'apex_crm.api.add_lead_note', args: { lead: lead_name, content: values.content }, callback: function (r) { if (!r.exc) { d2.hide(); refresh_notes_list(); frappe.show_alert({ message: __('Note Added'), indicator: 'green' }); if (window.global_listview_ref) window.global_listview_ref.refresh(); } } });
+                    frappe.call({
+                        method: 'apex_crm.api.add_lead_note',
+                        args: { lead: lead_name, content: values.content },
+                        callback: function (r) {
+                            if (!r.exc) {
+                                d2.hide();
+                                refresh_notes_list();
+                                frappe.show_alert({ message: __('Note Added'), indicator: 'green' });
+                                if (window.global_listview_ref) {
+                                    setTimeout(() => {
+                                        window.global_listview_ref.refresh();
+                                    }, 500);
+                                }
+                            }
+                        }
+                    });
                 });
             }
         });
@@ -760,7 +715,9 @@ function setupLeadCardView(listview) {
                     frappe.show_alert({ message: __('Status Updated'), indicator: 'green' });
                     $('.apex-status-popover').remove();
                     if (window.apex_crm_fetch_data && window.global_listview_ref) {
-                        window.global_listview_ref.refresh();
+                        setTimeout(() => {
+                            window.global_listview_ref.refresh();
+                        }, 500);
                     }
                 }
                 $(btn).removeClass('processing').css('opacity', '1');
@@ -778,84 +735,42 @@ function setupLeadCardView(listview) {
         const city = doc.city || doc.state || '';
         const mobile = doc.mobile_no || doc.phone || '';
 
+        // --- RESTORE PERSISTED STATE ---
+        let currentVal = mobile;
+        let currentType = mobile ? 'Mobile' : '';
+        let currentIcon = mobile ? '📱' : '📞';
+
+        if (window.apex_crm_selected_contacts && window.apex_crm_selected_contacts[doc.name]) {
+            const saved = window.apex_crm_selected_contacts[doc.name];
+            currentVal = saved.value;
+            currentType = saved.type;
+            currentIcon = saved.icon;
+        }
+
+        // Determine Button Visibility based on Current Type
+        const t = (currentType || '').toLowerCase();
+        const showEmail = t.includes('email');
+        const showFb = t.includes('facebook');
+        const showWeb = t.includes('website');
+        const showMap = t.includes('address') || t.includes('location');
+        const showMobile = !showEmail && !showFb && !showWeb && !showMap; // Default Group
+
+        // Truncate for Display
+        let displayText = currentVal || 'Select Contact';
+        if (displayText.length > 25 && (displayText.includes('http') || showFb || showWeb)) {
+            displayText = displayText.substring(0, 25) + '...';
+        }
+
+        // Icon HTML
+        let iconHtml = `<span class="flag-icon" style="margin-right:6px;">${currentIcon}</span>`;
+        if (currentIcon && currentIcon.startsWith('fa-')) {
+            iconHtml = `<span class="flag-icon" style="margin-right:6px;"><i class="fa ${currentIcon}"></i></span>`;
+        }
+
         // 6. TOGGLE CONTACT DETAILS (INTERACTIVE)
-        window.apex_crm_toggle_contacts = function (event, lead_name) {
-            event.stopPropagation();
-            const $container = $(`#contact-details-${lead_name}`);
-            const $btn = $(event.currentTarget).find('i'); // Fix: find i within the clicked element or use passed element
-            // In new HTML, the click is on the .phone-display or .btn-expand
-            // We'll trust the selector logic below
 
-            // Adjust icon selector if needed based on new HTML structure
-            // But let's keep logic generic: toggle container visibility
 
-            if ($container.is(':visible')) {
-                $container.slideUp('fast');
-                // Icon toggle logic (best effort)
-                $(`button[onclick*="${lead_name}"] i`).removeClass('fa-chevron-up').addClass('fa-chevron-down');
-            } else {
-                if ($container.data('loaded')) {
-                    $container.slideDown('fast');
-                    $(`button[onclick*="${lead_name}"] i`).removeClass('fa-chevron-down').addClass('fa-chevron-up');
-                    return;
-                }
-
-                $container.html('<div class="text-muted" style="font-size:11px; padding:4px;">Loading...</div>').slideDown('fast');
-                $(`button[onclick*="${lead_name}"] i`).removeClass('fa-chevron-down').addClass('fa-chevron-up');
-
-                frappe.call({
-                    method: 'apex_crm.api.get_lead_contact_details',
-                    args: { lead: lead_name },
-                    callback: function (r) {
-                        const details = r.message || [];
-                        const currentMobile = $(`#lead-card-${lead_name}`).attr('data-current-mobile');
-
-                        if (details.length === 0) {
-                            $container.html('<div class="text-muted" style="font-size:11px; padding:4px;">No other contacts</div>');
-                            $container.data('loaded', true);
-                            return;
-                        }
-
-                        let html = '<div style="display:flex; flex-direction:column; gap:6px; padding-top:6px;">';
-                        details.forEach(d => {
-                            let action = '';
-                            if (d.type === 'Mobile' || d.type === 'Phone') action = `href="tel:${d.value}"`;
-                            else if (d.type === 'WhatsApp') action = `href="https://wa.me/${d.value}"`;
-                            else if (d.type === 'Email') action = `href="mailto:${d.value}"`;
-                            else if (d.type === 'Website' || d.type === 'Facebook' || d.type === 'LinkedIn') action = `href="${d.value}" target="_blank"`;
-
-                            let displayVal = d.value;
-                            if (displayVal.length > 25) displayVal = displayVal.substring(0, 25) + '...';
-
-                            // Interactive Selection Logic
-                            const isSelected = (d.value === currentMobile);
-                            const selectedStyle = isSelected ? 'background-color:#eef2ff; border-left:3px solid #6366f1;' : 'border-left:3px solid transparent;';
-                            const checkIcon = isSelected ? '<i class="fa fa-check" style="color:#6366f1; font-size:10px;"></i>' : '';
-
-                            // Helper for external link opening
-                            const openLink = action ? `window.open('${action.replace(/href="|"/g, '')}', '_blank')` : '';
-
-                            html += `
-                            <div class="contact-detail-row" 
-                                 onclick="window.apex_crm_select_contact('${lead_name}', '${d.type}', '${d.value}', '${d.icon}')"
-                                 style="display:flex; align-items:center; cursor:pointer; color:#4b5563; font-size:12px; padding:6px 4px; border-bottom:1px dashed #f3f4f6; ${selectedStyle}">
-                                <div style="width:24px; text-align:center; margin-right:8px; color:#6b7280;"><i class="fa fa-${d.icon}"></i></div>
-                                <div style="flex:1;">
-                                    <div style="font-weight:600; color:#1f2937; font-size:13px;">${d.type}</div>
-                                    <div style="color:#6b7280;">${displayVal}</div>
-                                </div>
-                                <div style="color:#9ca3af; margin-right:6px;">${checkIcon}</div>
-                                <div onclick="event.stopPropagation(); ${openLink}" style="padding:4px;"><i class="fa fa-external-link" style="font-size:11px;"></i></div>
-                            </div>
-                         `;
-                        });
-                        html += '</div>';
-                        $container.html(html);
-                        $container.data('loaded', true);
-                    }
-                });
-            }
-        };
+        // 7. SELECT CONTACT HANDLER
 
         // 7. SELECT CONTACT HANDLER
         window.apex_crm_select_contact = function (lead_name, type, value, icon) {
@@ -863,30 +778,156 @@ function setupLeadCardView(listview) {
             const $phoneDisplay = $card.find('.phone-text');
             const $flag = $card.find('.flag-icon');
 
+            // PERSIST SELECTION (Crucial for Mobile Refresh)
+            if (!window.apex_crm_selected_contacts) window.apex_crm_selected_contacts = {};
+            window.apex_crm_selected_contacts[lead_name] = { type: type, value: value, icon: icon };
+
             // Update Display
-            $phoneDisplay.text(value);
-            // Update Icon? If type is WhatsApp, maybe show Whatsapp icon?
-            // User requested: "Choose contact -> Contact Icon appears".
-            // We'll update the flag icon to match the contact type if possible, or keep it simple.
-            const iconMap = { 'WhatsApp': '💬', 'Mobile': '📱', 'Phone': '📞', 'Email': '✉️', 'Facebook': 'fb' };
-            $flag.text(iconMap[type] || '📞');
+            // Truncate long URLs for display
+            let displayValue = value;
+            if (value && value.length > 25 && (value.includes('http') || type.toLowerCase().includes('facebook') || type.toLowerCase().includes('website'))) {
+                displayValue = value.substring(0, 25) + '...';
+            }
+            $phoneDisplay.text(displayValue);
+
+            // Update Icon
+            const iconMap = { 'WhatsApp': '💬', 'Mobile': '📱', 'Phone': '📞', 'Email': '✉️', 'Facebook': 'fa-facebook', 'Website': '🌐', 'Address': '📍', 'Location': '📍' };
+            // Use passed icon or map fallback
+            let finalIcon = icon;
+            if (!finalIcon || finalIcon === 'circle') finalIcon = iconMap[type] || '📞';
+
+            // Handle FA icons in selection display
+            if (finalIcon && finalIcon.startsWith('fa-')) {
+                $flag.html(`<i class="fa ${finalIcon}"></i>`);
+            } else if (finalIcon && !finalIcon.match(/[\u0000-\u007F]/)) {
+                $flag.text(finalIcon);
+            } else {
+                $flag.text('📞'); // default
+            }
 
             // Update Data Current
             $card.attr('data-current-mobile', value);
 
             // Update Buttons Logic
             const $btns = $card.find('.quick-btns');
-            $btns.find('.btn-call').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'Call', '${value}');`).show();
-            $btns.find('.btn-whatsapp').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'WhatsApp', '${value}');`).show();
-            $btns.find('.btn-sms').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'SMS', '${value}');`).show();
+            $btns.find('.quick-btn').hide(); // Hide all first
+            $btns.find('.btn-add').show(); // Always show add
 
-            // Highlight Selection
-            $card.find('.contact-detail-row').css({ 'background-color': 'transparent', 'border-left': '3px solid transparent' }).find('.fa-check').remove();
-            // Since we called this, find the row that matches value? Or just rebuild?
-            // Simplest: Close and Re-open to refresh checkmarks? No, jarring.
-            // Manual CSS update on clicked row (passed via event? No, logic above didn't pass event).
-            // We'll just hide the container to signal 'Selection Made'.
-            window.apex_crm_toggle_contacts({ stopPropagation: () => { } }, lead_name);
+            const typeLower = (type || '').toLowerCase();
+
+            // EMAIL TYPE
+            if (typeLower.includes('email')) {
+                $btns.find('.btn-email').attr('onclick', `event.stopPropagation(); window.location.href = 'mailto:${value}';`).show();
+            }
+            // FACEBOOK TYPE
+            else if (typeLower.includes('facebook')) {
+                $btns.find('.btn-facebook').attr('onclick', `event.stopPropagation(); window.open('${value.startsWith('http') ? value : 'https://' + value}', '_blank');`).show();
+            }
+            // WEBSITE TYPE
+            else if (typeLower.includes('website')) {
+                $btns.find('.btn-website').attr('onclick', `event.stopPropagation(); window.open('${value.startsWith('http') ? value : 'https://' + value}', '_blank');`).show();
+            }
+            // ADDRESS / LOCATION TYPE
+            else if (typeLower.includes('address') || typeLower.includes('location')) {
+                $btns.find('.btn-map').attr('onclick', `event.stopPropagation(); window.open('https://maps.google.com/?q=${encodeURIComponent(value)}', '_blank');`).show();
+            }
+            // PHONE / MOBILE / WHATSAPP TYPE
+            else {
+                $btns.find('.btn-call').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'Call', '${value}');`).show();
+
+                // Show/Hide WhatsApp/SMS based on type logic
+                if (['Mobile', 'WhatsApp'].includes(type) || !type) {
+                    $btns.find('.btn-whatsapp').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'WhatsApp', '${value}');`).show();
+                    $btns.find('.btn-sms').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'SMS', '${value}');`).show();
+                }
+            }
+
+            // Close updated popover
+            $(`#contact-popover-${lead_name}`).remove();
+        };
+
+        // 8. TOGGLE CONTACTS POPOVER
+        window.apex_crm_toggle_contacts = function (event, lead_name) {
+            event.stopPropagation();
+            const $card = $(`#lead-card-${lead_name}`);
+            const $container = $card.find('.card-header'); // Anchor to header
+
+            // Close if exists
+            if ($(`#contact-popover-${lead_name}`).length) {
+                $(`#contact-popover-${lead_name}`).remove();
+                return;
+            }
+
+            // Fetch Data
+            const $btn = $(event.currentTarget);
+            const offset = $btn.offset();
+
+            // Create Popover appended to BODY to avoid clipping
+            // Position carefully
+            const $popover = $(`<div id="contact-popover-${lead_name}" 
+                style="position:absolute; top:${offset.top + 38}px; left:${offset.left}px; z-index:9999; background:white; border:1px solid #e5e7eb; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); border-radius:8px; width:220px; padding:6px;">
+                <div class="text-muted" style="font-size:11px; padding:8px;">Loading contacts...</div>
+            </div>`);
+
+            $('body').append($popover);
+
+            // Close on outside click
+            $(document).one('click', function () {
+                $(`#contact-popover-${lead_name}`).remove();
+            });
+
+            frappe.call({
+                method: 'apex_crm.api.get_lead_contact_details',
+                args: { lead: lead_name },
+                callback: function (r) {
+                    const contacts = r.message || [];
+                    $popover.empty(); // Clear loading state
+
+                    if (contacts.length === 0) {
+                        $popover.append('<div class="text-muted" style="font-size:11px; padding:8px;">No contacts found</div>');
+                    } else {
+                        contacts.forEach(c => {
+                            // Correct Icon Mapping
+                            const typeLower = (c.type || '').toLowerCase();
+                            let listIconHtml = '';
+                            let displayIcon = '📞';
+
+                            if (typeLower.includes('email')) { listIconHtml = '<span>✉️</span>'; displayIcon = '✉️'; }
+                            else if (typeLower.includes('mobile')) { listIconHtml = '<span>📱</span>'; displayIcon = '📱'; }
+                            else if (typeLower.includes('phone')) { listIconHtml = '<span>📞</span>'; displayIcon = '📞'; }
+                            else if (typeLower.includes('whatsapp')) { listIconHtml = '<span>💬</span>'; displayIcon = '💬'; }
+                            else if (typeLower.includes('website')) { listIconHtml = '<span>🌐</span>'; displayIcon = '🌐'; }
+                            else if (typeLower.includes('facebook')) { listIconHtml = '<i class="fa fa-facebook"></i>'; displayIcon = 'fa-facebook'; }
+                            else if (typeLower.includes('address') || typeLower.includes('location')) { listIconHtml = '<span>📍</span>'; displayIcon = '📍'; }
+                            else if (c.icon && c.icon.startsWith('fa-')) { listIconHtml = `<i class="${c.icon}"></i>`; displayIcon = c.icon; }
+                            else if (c.icon && !c.icon.includes('-')) { listIconHtml = `<i class="fa fa-${c.icon}"></i>`; displayIcon = c.icon; }
+                            else { listIconHtml = '<span>📞</span>'; }
+
+                            // Create jQuery element safely
+                            const $item = $(`
+                                <div style="padding:8px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f3f4f6;">
+                                    ${listIconHtml}
+                                    <div style="display:flex; flex-direction:column;">
+                                        <span style="font-weight:600; font-size:13px; color:#374151;">${c.type}</span>
+                                        <span style="font-size:12px; color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;"></span>
+                                    </div>
+                                </div>
+                            `);
+
+                            // Set text safely to avoid XSS/breaking
+                            $item.find('span').last().text(c.value);
+
+                            // Bind logic without string interpolation
+                            $item.on('click', function (e) {
+                                e.stopPropagation();
+                                window.apex_crm_select_contact(lead_name, c.type, c.value, displayIcon);
+                            });
+
+                            $popover.append($item);
+                        });
+                    }
+                }
+            });
         };
 
         const initials = frappe.get_abbr(lead_name);
@@ -897,15 +938,25 @@ function setupLeadCardView(listview) {
         return `
             <div class="apex-premium-card" id="lead-card-${doc.name}" data-name="${doc.name}" data-current-mobile="${mobile}" onclick="frappe.set_route('Form', 'Lead', '${doc.name}')">
                 <div class="card-header" style="align-items: flex-start;">
-                    <div class="card-header-left">
-                        <div class="card-avatar" style="margin-top: 4px;">${initials}</div>
-                        <div class="card-info">
-                            <div class="card-name" style="margin-bottom: 2px;">${lead_name}</div>
+                    <div class="card-header-left" style="min-width: 0; flex: 1;">
+                        <!-- Avatar Removed as per user request -->
+                        <div class="card-info" style="min-width: 0; width: 100%;">
+                            <div class="card-name" style="margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight:700; font-size:15px;">${lead_name}</div>
                             
-                            <div class="card-subtext" style="display: flex; flex-direction: column; gap: 3px;">
-                                ${(title && title !== lead_name) ? `<span style="font-weight: 500; color: #4b5563;">${title}</span>` : ''}
-                                ${last_updated ? `<span style="font-size: 11px; color: #6b7280;"><i class="fa fa-clock-o" style="margin-right:4px;"></i>${last_updated}</span>` : ''}
-                                ${(territory || city) ? `<span style="font-size: 11px; color: #6b7280;"><i class="fa fa-map-marker" style="margin-right:4px;"></i>${[territory, city].filter(Boolean).join(' • ')}</span>` : ''}
+                            <div class="card-subtext" style="display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom:4px;">
+                                ${(title && title !== lead_name) ? `<span style="font-weight: 500; color: #4b5563; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${title}</span>` : ''}
+                                ${title && last_updated ? `<span style="color:#d1d5db; font-size:10px;">•</span>` : ''}
+                                ${last_updated ? `<span style="font-size: 11px; color: #6b7280;"><i class="fa fa-clock-o" style="margin-right:2px;"></i>${last_updated}</span>` : ''}
+                                ${(last_updated && (territory || city)) ? `<span style="color:#d1d5db; font-size:10px;">•</span>` : ''}
+                                ${(territory || city) ? `<span style="font-size: 11px; color: #6b7280;"><i class="fa fa-map-marker" style="margin-right:2px;"></i>${[territory, city].filter(Boolean).join(', ')}</span>` : ''}
+                            </div>
+                            
+                            <!-- New Fields: Owner, Type, Request -->
+                            <!-- New Fields: Owner, Type, Request -->
+                            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; margin-bottom: 2px;">
+                                ${doc.lead_owner ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.lead_owner}</span>` : ''}
+                                ${doc.type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.type}</span>` : ''}
+                                ${doc.request_type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.request_type}</span>` : ''}
                             </div>
                         </div>
                     </div>
@@ -922,16 +973,27 @@ function setupLeadCardView(listview) {
                     <!-- Dropdown Trigger Look -->
                     <div class="phone-display" onclick="window.apex_crm_toggle_contacts(event, '${doc.name}')" 
                          style="display:flex; align-items:center; background:#f3f4f6; padding:4px 8px; border-radius:6px; cursor:pointer; border:1px solid #e5e7eb;">
-                        <span class="flag-icon" style="margin-right:6px;">${mobile ? '📱' : '📞'}</span>
-                        <span class="phone-text" style="font-weight:600; font-size:13px; color:#374151; margin-right:4px;">${mobile || 'Select Contact'}</span>
+                        ${iconHtml}
+                        <span class="phone-text" style="font-weight:600; font-size:13px; color:#374151; margin-right:4px;">${displayText}</span>
                         <i class="fa fa-caret-down" style="color:#6b7280; font-size:11px;"></i>
                     </div>
                 
                     <div class="quick-btns" onclick="event.stopPropagation();">
                         <button class="quick-btn btn-add" data-name="${doc.name}" onclick="event.stopPropagation(); window.apex_crm_quick_add('${doc.name}');"><i class="fa fa-plus"></i></button>
-                        ${mobile ? `<button class="quick-btn btn-call" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'Call', '${mobile}');"><i class="fa fa-phone"></i></button>` : ''}
-                        ${mobile ? `<button class="quick-btn btn-whatsapp" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'WhatsApp', '${mobile}');"><i class="fa fa-whatsapp"></i></button>` : ''}
-                        ${mobile ? `<button class="quick-btn btn-sms" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'SMS', '${mobile}');"><i class="fa fa-comment"></i></button>` : ''}
+                        
+                        <!-- Phone Actions -->
+                        <button class="quick-btn btn-call" style="${showMobile ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'Call', '${currentVal}');"><i class="fa fa-phone"></i></button>
+                        <button class="quick-btn btn-whatsapp" style="${showMobile ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'WhatsApp', '${currentVal}');"><i class="fa fa-whatsapp"></i></button>
+                        <button class="quick-btn btn-sms" style="${showMobile ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'SMS', '${currentVal}');"><i class="fa fa-comment"></i></button>
+                        
+                        <!-- Email Action -->
+                         <button class="quick-btn btn-email" style="${showEmail ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.location.href = 'mailto:${currentVal}';"><i class="fa fa-envelope"></i></button>
+                         <!-- Website Action -->
+                         <button class="quick-btn btn-website" style="${showWeb ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('${currentVal.startsWith('http') ? currentVal : 'https://' + currentVal}', '_blank');"><i class="fa fa-globe"></i></button>
+                         <!-- Facebook Action -->
+                         <button class="quick-btn btn-facebook" style="${showFb ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('${currentVal.startsWith('http') ? currentVal : 'https://' + currentVal}', '_blank');"><i class="fa fa-facebook"></i></button>
+                         <!-- Map Action -->
+                         <button class="quick-btn btn-map" style="${showMap ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('https://maps.google.com/?q=${encodeURIComponent(currentVal)}', '_blank');"><i class="fa fa-map-marker"></i></button>
                     </div>
                 </div>
 
@@ -973,15 +1035,14 @@ function setupLeadCardView(listview) {
     // Only remove/add if mobile
     if (!is_mobile()) return;
 
-    // CLEANUP: Remove ALL old card containers and elements
-    $("#lead-cards-container").remove();
+    // CLEANUP: Remove legacy container only
     $("#mobile-layout-container").remove();
-    $(".apex-premium-card").remove(); // Remove any orphaned cards
 
     console.log("Apex CRM: setupLeadCardView Called. Mobile:", is_mobile(), "Data:", listview.data ? listview.data.length : 0);
 
     // WRAP IN TIMEOUT to ensure Frappe DOM is ready/settled
     setTimeout(() => {
+
         // A. INJECT CSS FORCEFULLY - Clean up empty space
         const styleId = 'apex-mobile-cleaner-v6';
         if ($(`#${styleId}`).length === 0) {
@@ -1050,6 +1111,49 @@ function setupLeadCardView(listview) {
                             padding: 0 !important;
                             margin: 0 !important;
                         }
+                        
+                        /* NEW: Wrapped Grid for Pills (User Request) */
+                        .card-info-body {
+                            display: flex !important;
+                            flex-wrap: wrap !important; /* Wrap to next line */
+                            overflow: visible !important; /* No scrolling */
+                            gap: 8px !important;
+                            padding: 8px 0 !important;
+                            width: 100% !important;
+                        }
+                        
+                        /* Hide scrollbar styles as no longer needed */
+                        .card-info-body::-webkit-scrollbar {
+                            display: none;
+                        }
+                        
+                        /* NEW: Larger Pills */
+                        .info-pill {
+                            flex: 0 0 auto !important;
+                            padding: 8px 12px !important;
+                            font-size: 13px !important;
+                            border-radius: 20px !important;
+                            background: #f3f4f6;
+                            border: 1px solid #e5e7eb;
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            white-space: nowrap;
+                        }
+
+                        /* NEW: Horizontal Scroll for Quick Buttons */
+                        .quick-btns {
+                            display: flex !important;
+                            overflow-x: auto !important;
+                            white-space: nowrap !important;
+                            gap: 8px !important;
+                            -webkit-overflow-scrolling: touch !important; /* Critical for smooth iOS scroll */
+                            scrollbar-width: none; /* Firefox */
+                            padding-bottom: 4px; /* Space for scrollbar if visible */
+                        }
+                        .quick-btns::-webkit-scrollbar {
+                            display: none; /* Chrome/Safari */
+                        }
                     }
                 </style>
             `);
@@ -1096,7 +1200,11 @@ function setupLeadCardView(listview) {
         // Setup search bar first (this creates it if doesn't exist)
         let $searchBar = setupUniversalSearchBar(listview);
 
-        if ($searchBar && $searchBar.length) {
+        // CRITICAL: If search bar is already in stable wrapper, DO NOT TOUCH IT
+        if ($('.apex-stable-search-container').find('.apex-universal-search').length > 0) {
+            console.log("Apex CRM: Search bar is in stable container, skipping re-attachment");
+            $searchBar.show();
+        } else if ($searchBar && $searchBar.length) {
             // Remove from current parent if exists
             $searchBar.detach();
 
@@ -1129,11 +1237,9 @@ function setupLeadCardView(listview) {
         $('.standard-filter-section').show();
 
         // D. CARDS - Insert BEFORE pagination, clean up .result first
-        // First, remove any existing cards container
+        // Check for existing container
         let $cards = $('#lead-cards-container');
-        if ($cards.length) {
-            $cards.remove(); // Complete removal
-        }
+
 
         // Clean up .result container - Remove empty children that cause space
         const $resultArea = $frappeList.find('.result').first();
@@ -1148,8 +1254,10 @@ function setupLeadCardView(listview) {
             });
         }
 
-        // Create fresh container
-        $cards = $('<div id="lead-cards-container"></div>');
+        // Create fresh container if missing
+        if (!$cards.length) {
+            $cards = $('<div id="lead-cards-container"></div>');
+        }
 
         // Find pagination
         const $paging = $frappeList.find('.list-paging-area').first();
@@ -1157,30 +1265,28 @@ function setupLeadCardView(listview) {
         console.log("Apex CRM: Result area found:", $resultArea.length, "Pagination found:", $paging.length);
 
         if ($paging.length && $resultArea.length) {
-            // BEST CASE: Both exist - insert cards inside .result, before pagination
-            // Check if pagination is inside .result
-            if ($paging.closest('.result').length) {
-                // Pagination is inside .result - insert cards before it
-                $paging.before($cards);
-                console.log("Apex CRM: Cards inserted before pagination (inside .result)");
-            } else {
-                // Pagination is sibling of .result - insert cards after .result, before pagination
-                $paging.before($cards);
-                console.log("Apex CRM: Cards inserted before pagination (sibling of .result)");
+            if (!$('#lead-cards-container').length) {
+                if ($paging.closest('.result').length) {
+                    $paging.before($cards);
+                } else {
+                    $paging.before($cards);
+                }
             }
         } else if ($resultArea.length) {
-            // No pagination yet - append to result area
-            $resultArea.append($cards);
-            console.log("Apex CRM: Cards appended to result area (no pagination)");
+            if (!$('#lead-cards-container').length) {
+                $resultArea.append($cards);
+            }
         } else if ($paging.length) {
-            // No result area - insert before pagination
-            $paging.before($cards);
-            console.log("Apex CRM: Cards inserted before pagination (no result area)");
+            if (!$('#lead-cards-container').length) {
+                $paging.before($cards);
+            }
         } else {
-            // Last resort: append to frappe-list
-            $frappeList.append($cards);
+            if (!$('#lead-cards-container').length) {
+                $frappeList.append($cards);
+            }
             console.warn("Apex CRM: Cards appended to frappe-list (fallback)");
         }
+
 
         // Force show cards with explicit styles - NO extra spacing
         $cards.css({
@@ -1218,52 +1324,55 @@ function setupLeadCardView(listview) {
 // -------------------------------------------------------------------------------- //
 
 function setupUniversalSearchBar(listview) {
-    // Remove old search bar if exists
-    $('.apex-universal-search').remove();
-    
+    // SINGLETON: Reuse existing search bar to maintain focus/state
+    if ($('.apex-universal-search').length > 0 && $('.apex-universal-search').is(':visible')) {
+        return $('.apex-universal-search');
+    }
+    $('.apex-universal-search').remove(); // Clean up only if hidden/broken
+
     // Simple debounce function
     const debounce = (func, wait) => {
         let timeout;
-        return function(...args) {
+        return function (...args) {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
     };
-    
+
     // Fields that need select dropdown
     const selectFields = ['status', 'source', 'city', 'territory', 'country'];
-    
+
     // Get field options
     const getFieldOptions = (fieldName) => {
         try {
             const meta = frappe.get_meta('Lead');
             if (!meta || !meta.fields) return getFallbackOptions(fieldName);
-            
+
             const field = meta.fields.find(f => f.fieldname === fieldName);
             if (!field) return getFallbackOptions(fieldName);
-            
+
             // For Select fields, return options
             if (field.fieldtype === 'Select' && field.options) {
                 return field.options.split('\n').filter(o => o.trim());
             }
-            
+
             // For Link fields like Territory, fetch from database
             if (field.fieldtype === 'Link' && field.options) {
                 return getLinkFieldOptions(fieldName, field.options);
             }
-            
+
             // For Data fields like City, fetch distinct values from database
             if (field.fieldtype === 'Data' && fieldName === 'city') {
                 // Return empty array initially, will be populated async
                 return [];
             }
-            
+
             return getFallbackOptions(fieldName);
         } catch (e) {
             return getFallbackOptions(fieldName);
         }
     };
-    
+
     // Get options for Link fields (like Territory) - returns Promise
     const getLinkFieldOptions = async (fieldName, doctype) => {
         try {
@@ -1276,7 +1385,7 @@ function setupUniversalSearchBar(listview) {
                 });
                 return territories.map(t => t.name);
             }
-            
+
             // For Country, fetch from Country doctype (same as desktop)
             if (doctype === 'Country') {
                 const countries = await frappe.db.get_list('Country', {
@@ -1287,14 +1396,14 @@ function setupUniversalSearchBar(listview) {
                 // Country doctype uses 'name' field which is the country_name
                 return countries.map(c => c.name).sort();
             }
-            
+
             return getFallbackOptions(fieldName);
         } catch (e) {
             console.error('Apex CRM: Error fetching link field options:', e);
             return getFallbackOptions(fieldName);
         }
     };
-    
+
     // Get City options from database - returns Promise
     const getCityOptions = async () => {
         try {
@@ -1311,7 +1420,7 @@ function setupUniversalSearchBar(listview) {
             return getFallbackOptions('city');
         }
     };
-    
+
     const getFallbackOptions = (fieldName) => {
         const fallback = {
             'status': ['Lead', 'Open', 'Replied', 'Opportunity', 'Quotation', 'Lost Quotation', 'Interested', 'Converted', 'Do Not Contact'],
@@ -1319,7 +1428,7 @@ function setupUniversalSearchBar(listview) {
         };
         return fallback[fieldName] || [];
     };
-    
+
     // Inject CSS
     if ($('#apex-universal-search-css').length === 0) {
         $('head').append(`
@@ -1397,7 +1506,7 @@ function setupUniversalSearchBar(listview) {
             </style>
         `);
     }
-    
+
     // Create HTML
     const $searchBar = $(`
         <div class="apex-universal-search">
@@ -1441,23 +1550,50 @@ function setupUniversalSearchBar(listview) {
             </div>
         </div>
     `);
-    
-    // Position search bar
+
+    // STABLE POSITIONING: Inject securely after the page header
+    // This allows it to scroll naturally but stay separate from the refreshing list.
     setTimeout(() => {
-        const $frappeList = $('.frappe-list').first();
-        if ($frappeList.length) {
-            $frappeList.prepend($searchBar);
-        } else {
-            $('.page-form').first().prepend($searchBar);
+        // 1. Clean up fixed wrapper if exists (reverting user dislike)
+        $('.apex-fixed-search-wrapper').remove();
+        $('.apex-search-wrapper').remove(); // Clean old regular wrapper
+
+        // 2. Create a stable home for the search bar
+        // We inject it AFTER .page-head so it sits between header and list
+        const $anchor = $('.page-head').first();
+        const $wrapperClass = 'apex-stable-search-container';
+
+        if ($(`.${$wrapperClass}`).length === 0) {
+            $anchor.after(`<div class="${$wrapperClass}" style="
+                background: #fff; 
+                z-index: 99; 
+                position: relative; 
+                padding: 10px 15px 0 15px; 
+                border-bottom: 1px solid #f3f4f6;
+            "></div>`);
         }
+
+        const $wrapper = $(`.${$wrapperClass}`);
+
+        // 3. Move search bar to this stable wrapper if not already there
+        // This check prevents re-appending on every refresh, saving focus
+        if ($wrapper.find('.apex-universal-search').length === 0) {
+            $wrapper.append($searchBar);
+        }
+
+        // 4. Adjust spacing
+        if ($('.frappe-list').length) {
+            $('.frappe-list').css('margin-top', '0px'); // Reset margin
+        }
+
     }, 100);
-    
+
     // Get elements
     const $input = $searchBar.find('#lead-search-input');
     const $selectValue = $searchBar.find('#lead-search-select');
     const $selectField = $searchBar.find('#lead-search-field');
     const $clear = $searchBar.find('#lead-search-clear');
-    
+
     // Switch input type
     const switchInputType = (fieldName) => {
         const fieldMap = {
@@ -1474,14 +1610,14 @@ function setupUniversalSearchBar(listview) {
         };
         const actualField = fieldMap[fieldName] || fieldName;
         const needsSelect = selectFields.includes(actualField);
-        
+
         if (needsSelect) {
             $input.hide();
             $selectValue.show().empty().append(`<option value="">Select...</option>`);
-            
+
             // Get options (async for Link/Data fields)
             const options = getFieldOptions(actualField);
-            
+
             // Handle Promise for async options (City, Territory)
             if (options && typeof options.then === 'function') {
                 options.then(opts => {
@@ -1511,7 +1647,7 @@ function setupUniversalSearchBar(listview) {
             $selectValue.hide();
             $input.show().focus();
         }
-        
+
         // Update placeholder for alias fields
         const placeholderMap = {
             'custom_search_index': __('Search anything...'),
@@ -1537,37 +1673,40 @@ function setupUniversalSearchBar(listview) {
             'address_search': __('Search in address...'),
             'interaction_search': __('Search in interactions...')
         };
-        
+
         if (placeholderMap[fieldName]) {
             $input.attr('placeholder', placeholderMap[fieldName]);
         }
     };
-    
+
     // Search function
     const doSearch = () => {
         const field = $selectField.val();
         const isSelect = $selectValue.is(':visible');
         const val = isSelect ? $selectValue.val() : $input.val().trim();
-        
+
         // CRITICAL: Save field selection before any operations
         const savedField = field;
         const savedValue = val;
         const savedIsSelect = isSelect;
-        
+
         if (!val) {
             listview.filter_area.clear().then(() => {
-                listview.refresh();
-                // Restore field selection after refresh
+                // Simple refresh without undefined safeRefresh
                 setTimeout(() => {
-                    if ($selectField.val() !== savedField) {
-                        $selectField.val(savedField);
-                        switchInputType(savedField);
-                    }
-                }, 200);
+                    listview.refresh();
+                    // Restore field selection after refresh
+                    setTimeout(() => {
+                        if ($selectField.val() !== savedField) {
+                            $selectField.val(savedField);
+                            switchInputType(savedField);
+                        }
+                    }, 200);
+                }, 50);
             });
             return;
         }
-        
+
         const fieldMap = {
             'lead_name': 'name',
             'mobile_no': 'mobile_no',
@@ -1579,17 +1718,17 @@ function setupUniversalSearchBar(listview) {
             'territory': 'territory',
             'source': 'source'
         };
-        
+
         let actualField = fieldMap[field] || field;
         let operator = 'like';
         let filterValue = `%${val}%`;
-        
+
         // Exact match fields (use '=' instead of 'like')
         if (['status', 'source', 'city', 'territory', 'country'].includes(actualField)) {
             operator = '=';
             filterValue = val;
         }
-        
+
         // Smart contact search fields - search in smart_contact_details JSON
         if (['phone_search', 'whatsapp_search', 'telegram_search', 'facebook_search', 'instagram_search', 'linkedin_search', 'website_search'].includes(field)) {
             actualField = 'custom_search_index';
@@ -1608,206 +1747,77 @@ function setupUniversalSearchBar(listview) {
             // Search for the contact type and value in custom_search_index
             filterValue = `%${contactType}:${val}%`; // Format: "Phone:01234567890"
         }
-        
+
         // Alias fields - use custom_search_index for these
         if (['note_search', 'comment_search', 'task_search', 'event_search', 'address_search', 'interaction_search'].includes(field)) {
             actualField = 'custom_search_index';
             operator = 'like';
             filterValue = `%${val}%`; // Partial match for search index
         }
-        
+
         if (field === 'custom_search_index') {
             actualField = 'custom_search_index';
         }
-        
-        // CRITICAL: Save cursor position BEFORE any operations
-        const cursorPos = $input.is(':visible') && $input[0] ? $input[0].selectionStart : null;
-        
+
+
         listview.filter_area.clear(true).then(() => {
             return listview.filter_area.add([['Lead', actualField, operator, filterValue]]);
         }).then(() => {
-            // CRITICAL: NEVER refresh if user is actively typing - this causes cursor loss
-            if (isTyping) {
-                // Restore focus and cursor position immediately WITHOUT refresh
-                requestAnimationFrame(() => {
-                    if ($input.is(':visible')) {
-                        $input.focus();
-                        if (cursorPos !== null && $input[0] && $input[0].setSelectionRange) {
-                            $input[0].setSelectionRange(cursorPos, cursorPos);
-                        } else {
-                            const len = $input.val().length;
-                            if ($input[0] && $input[0].setSelectionRange) {
-                                $input[0].setSelectionRange(len, len);
-                            }
-                        }
-                    }
-                });
-                return;
-            }
-            
-            // Wait longer and check multiple times before refresh
-            setTimeout(() => {
-                // Triple-check that user is not typing
-                if (isTyping) {
-                    // Still typing - skip refresh and restore cursor
-                    requestAnimationFrame(() => {
-                        if ($input.is(':visible')) {
-                            $input.focus();
-                            if (cursorPos !== null && $input[0] && $input[0].setSelectionRange) {
-                                $input[0].setSelectionRange(cursorPos, cursorPos);
-                            } else {
-                                const len = $input.val().length;
-                                if ($input[0] && $input[0].setSelectionRange) {
-                                    $input[0].setSelectionRange(len, len);
-                                }
-                            }
-                        }
-                    });
-                    return;
-                }
-                
-                // CRITICAL: Save field selection and cursor position before refresh
-                const savedFieldBeforeRefresh = $selectField.val();
-                const savedValueBeforeRefresh = isSelect ? $selectValue.val() : $input.val();
-                const savedIsSelectBeforeRefresh = isSelect;
-                const savedCursorPos = cursorPos !== null ? cursorPos : (savedValueBeforeRefresh ? savedValueBeforeRefresh.length : 0);
-                
-                // User finished typing - safe to refresh
-                listview.refresh();
-                // Restore focus, field selection, and cursor position after refresh
-                setTimeout(() => {
-                    // CRITICAL: Restore field selection FIRST
-                    const $fieldAfter = $('.apex-universal-search #lead-search-field');
-                    const $inputAfter = $('.apex-universal-search #lead-search-input');
-                    const $selectAfter = $('.apex-universal-search #lead-search-select');
-                    
-                    if ($fieldAfter.length && $fieldAfter.val() !== savedFieldBeforeRefresh) {
-                        $fieldAfter.val(savedFieldBeforeRefresh);
-                        switchInputType(savedFieldBeforeRefresh);
-                    }
-                    
-                    // Then restore value and cursor
-                    if (savedIsSelectBeforeRefresh) {
-                        setTimeout(() => {
-                            if ($selectAfter.length && $selectAfter.is(':visible')) {
-                                $selectAfter.val(savedValueBeforeRefresh);
-                                $selectAfter.focus();
-                            }
-                        }, 100);
-                    } else {
-                        if ($inputAfter.length && $inputAfter.is(':visible')) {
-                            $inputAfter.val(savedValueBeforeRefresh);
-                            $inputAfter.focus();
-                            // CRITICAL: Restore exact cursor position
-                            if ($inputAfter[0] && $inputAfter[0].setSelectionRange) {
-                                const pos = Math.min(savedCursorPos, savedValueBeforeRefresh.length);
-                                $inputAfter[0].setSelectionRange(pos, pos);
-                            }
-                        }
-                    }
-                    
-                    // Clear Title field
-                    $('.list-row-filters input, .list-row-head input').val('').blur();
-                }, 200);
-            }, 800); // Longer delay to ensure user finished typing
+            listview.refresh();
+            // Singleton pattern maintains focus naturally; no need to force it.
         });
     };
-    
-    // Flag to prevent refresh during typing
-    let isTyping = false;
-    let typingTimeout = null;
-    
-    // Debounced search - CRITICAL: Don't mark as not typing immediately
-    // This prevents refresh from happening while user is still typing
-    const debouncedSearch = debounce(() => {
-        // Only mark as not typing if user hasn't typed in a while
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-            isTyping = false;
-            doSearch();
-        }, 500); // Additional delay before marking as not typing
-    }, 1200); // Increased debounce delay for more stability
-    
+
+    // Simple debounce
+    const debouncedSearch = debounce(doSearch, 600);
+
+
     // Field selector change
-    $selectField.on('change', function() {
+    $selectField.on('change', function () {
         $input.val('');
         $selectValue.val('');
         $clear.hide();
         switchInputType($(this).val());
     });
-    
+
     // Input event - CRITICAL: Prevent focus loss
-    $input.on('input', function(e) {
+    $input.on('input', function (e) {
         // Stop event propagation
         e.stopPropagation();
         e.stopImmediatePropagation();
-        
+
         const val = $(this).val();
         if (val) {
             $clear.show();
         } else {
             $clear.hide();
         }
-        
-        // CRITICAL: Clear ID/Title fields IMMEDIATELY on ALL devices
-        $('.list-row-filters input, .list-row-head input').val('').blur().prop('disabled', true);
-        
-        // CRITICAL: Mark as typing and save cursor position
-        isTyping = true;
-        clearTimeout(typingTimeout);
-        
-        // Save current cursor position BEFORE any operations
-        const currentCursorPos = $input[0] && $input[0].selectionStart !== undefined ? $input[0].selectionStart : val.length;
-        
-        // CRITICAL: Force focus to stay on search input IMMEDIATELY with cursor position
-        requestAnimationFrame(() => {
-            if ($input.is(':visible')) {
-                $input.focus();
-                // Restore cursor position immediately
-                if ($input[0] && $input[0].setSelectionRange) {
-                    $input[0].setSelectionRange(currentCursorPos, currentCursorPos);
-                }
-            }
-        });
-        
-        // Also use setTimeout as backup
-        setTimeout(() => {
-            if ($input.is(':visible')) {
-                $input.focus();
-                if ($input[0] && $input[0].setSelectionRange) {
-                    $input[0].setSelectionRange(currentCursorPos, currentCursorPos);
-                }
-            }
-        }, 0);
-        
-        // CRITICAL: Search on ANY input change (even when clearing)
-        // This makes search "stable" - searches when typing AND when clearing
-        if (val.length >= 2) {
-            debouncedSearch();
-        } else if (val.length === 0) {
-            // CRITICAL: Also search when clearing (to show all results)
+
+        // Search on input change (standard behavior)
+        if (val.length >= 2 || val.length === 0) {
             debouncedSearch();
         }
     });
-    
+
+
     // CRITICAL: Prevent keyboard events from reaching Title field
-    $input.on('keydown keypress keyup', function(e) {
+    $input.on('keydown keypress keyup', function (e) {
         e.stopPropagation();
         e.stopImmediatePropagation();
-        
+
         // Clear Title field immediately
         $('.list-row-filters input, .list-row-head input').val('').blur().prop('disabled', true);
     });
-    
+
     // Select change - CRITICAL: Preserve field selection after search
-    $selectValue.on('change', function() {
+    $selectValue.on('change', function () {
         const selectedValue = $(this).val();
         const currentField = $selectField.val(); // Save current field
-        
+
         if (selectedValue) {
             $clear.show();
             doSearch();
-            
+
             // CRITICAL: After search completes, restore field selection
             setTimeout(() => {
                 const $fieldAfter = $('.apex-universal-search #lead-search-field');
@@ -1838,26 +1848,28 @@ function setupUniversalSearchBar(listview) {
             });
         }
     });
-    
+
     // Enter key
-    $input.on('keypress', function(e) {
+    $input.on('keypress', function (e) {
         if (e.which === 13) {
             e.preventDefault();
             doSearch();
         }
     });
-    
+
     // Clear button
-    $clear.on('click', function() {
+    $clear.on('click', function () {
         $input.val('');
         $selectValue.val('');
         $clear.hide();
-        listview.filter_area.clear().then(() => listview.refresh());
+        listview.filter_area.clear().then(() => {
+            listview.refresh();
+        });
     });
-    
+
     // Initialize
     switchInputType('custom_search_index');
-    
+
     // CRITICAL: Prevent ID/Title fields from capturing input on ALL devices
     const preventTitleCapture = (e) => {
         // If our search input is focused or has value, prevent Title field from capturing
@@ -1866,7 +1878,7 @@ function setupUniversalSearchBar(listview) {
             if ($titleFields.length) {
                 // Check if event target is Title field
                 const $target = $(e.target);
-                if ($target.closest('.list-row-filters').length || 
+                if ($target.closest('.list-row-filters').length ||
                     $target.closest('.list-row-head').length ||
                     $target.is('.list-row-filters input') ||
                     $target.is('.list-row-head input')) {
@@ -1874,10 +1886,10 @@ function setupUniversalSearchBar(listview) {
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     e.preventDefault();
-                    
+
                     // Clear and disable Title fields
                     $titleFields.val('').blur().prop('disabled', true);
-                    
+
                     // Force focus back to search input
                     setTimeout(() => {
                         if ($input.is(':visible')) {
@@ -1893,15 +1905,15 @@ function setupUniversalSearchBar(listview) {
             }
         }
     };
-    
+
     // Use capture phase to intercept BEFORE Frappe handles it
     document.addEventListener('keydown', preventTitleCapture, true);
     document.addEventListener('keypress', preventTitleCapture, true);
     document.addEventListener('input', preventTitleCapture, true);
     document.addEventListener('focus', preventTitleCapture, true);
-    
+
     // Also prevent Title field from getting focus
-    $(document).on('focus', '.list-row-filters input, .list-row-head input', function(e) {
+    $(document).on('focus', '.list-row-filters input, .list-row-head input', function (e) {
         if ($input.is(':focus') || $input.val()) {
             $(this).blur().prop('disabled', true);
             setTimeout(() => {
@@ -1911,6 +1923,6 @@ function setupUniversalSearchBar(listview) {
             }, 0);
         }
     });
-    
+
     return $searchBar;
 }
