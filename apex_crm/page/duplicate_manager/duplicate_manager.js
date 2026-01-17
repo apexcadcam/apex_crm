@@ -28,14 +28,18 @@ apex_crm.duplicate_manager = {
 
     load_duplicates: function () {
         let me = this;
+        console.log('Starting API call to get_duplicate_groups...');
         frappe.call({
             method: 'apex_crm.api.get_duplicate_groups',
             freeze: true,
             freeze_message: 'Searching for duplicates...',
             callback: function (r) {
+                console.log('API Response:', r);
                 if (r.message && r.message.length > 0) {
+                    console.log('Found duplicates:', r.message.length);
                     me.render_results(r.message);
                 } else {
+                    console.log('No duplicates found');
                     me.wrapper.html(`
 						<div class="text-center text-muted" style="padding: 100px;">
 							<i class="fa fa-check-circle" style="font-size: 48px; color: #72b380; margin-bottom: 20px;"></i><br>
@@ -46,11 +50,12 @@ apex_crm.duplicate_manager = {
             },
             error: function (r) {
                 console.error('Duplicate Manager Error:', r);
+                console.error('Full error object:', JSON.stringify(r, null, 2));
                 me.wrapper.html(`
                     <div class="text-center text-danger" style="padding: 50px;">
                         <i class="fa fa-exclamation-triangle" style="font-size: 32px; margin-bottom: 15px;"></i><br>
                         Error loading duplicates.<br>
-                        <small>${r.message || 'Please check console logs'}</small>
+                        <small>${r.message || r._server_messages || 'Please check console logs'}</small>
                     </div>
                 `);
             }

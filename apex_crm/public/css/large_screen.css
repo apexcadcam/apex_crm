@@ -1,0 +1,485 @@
+/* Large Screen Font Scaling for 55" TV Display
+   This CSS file increases font sizes and UI elements for better visibility on large screens */
+
+/* Base font size increase - affects all text */
+:root {
+    --text-base: 18px !important; /* Default: 14px */
+    --text-sm: 16px !important; /* Default: 13px */
+    --text-xs: 15px !important; /* Default: 12px */
+    --text-lg: 20px !important; /* Default: 16px */
+    --text-xl: 22px !important; /* Default: 18px */
+    --text-2xl: 24px !important; /* Default: 20px */
+    --text-3xl: 28px !important; /* Default: 24px */
+}
+
+/* Body and main content */
+body {
+    font-size: 18px !important;
+    line-height: 1.6 !important;
+}
+
+/* Form controls and inputs */
+.form-control,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+select,
+textarea {
+    font-size: 18px !important;
+    padding: 12px 16px !important;
+    height: auto !important;
+    min-height: 48px !important;
+}
+
+/* Labels */
+.control-label,
+label,
+.form-label {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+}
+
+/* Buttons */
+.btn,
+button {
+    font-size: 18px !important;
+    padding: 12px 24px !important;
+    min-height: 48px !important;
+}
+
+.btn-sm {
+    font-size: 16px !important;
+    padding: 10px 20px !important;
+    min-height: 44px !important;
+}
+
+.btn-lg {
+    font-size: 20px !important;
+    padding: 14px 28px !important;
+    min-height: 52px !important;
+}
+
+/* Navigation and sidebar */
+.navbar,
+.sidebar,
+.sidebar-menu {
+    font-size: 18px !important;
+}
+
+.sidebar-item,
+.navbar-item {
+    font-size: 18px !important;
+    padding: 14px 16px !important;
+    min-height: 50px !important;
+}
+
+/* List views */
+.list-row,
+.list-row-head {
+    font-size: 18px !important;
+    padding: 16px !important;
+    min-height: 60px !important;
+}
+
+.list-row-head {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+}
+
+/* Tables */
+.table,
+table {
+    font-size: 18px !important;
+}
+
+.table th,
+table th {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 14px 12px !important;
+}
+
+.table td,
+table td {
+    font-size: 18px !important;
+    padding: 14px 12px !important;
+}
+
+/* Form sections */
+.form-section {
+    font-size: 18px !important;
+}
+
+.section-head {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    margin-bottom: 16px !important;
+}
+
+/* Headings */
+h1 {
+    font-size: 32px !important;
+}
+
+h2 {
+    font-size: 28px !important;
+}
+
+h3 {
+    font-size: 24px !important;
+}
+
+h4 {
+    font-size: 22px !important;
+}
+
+h5 {
+    font-size: 20px !important;
+}
+
+h6 {
+    font-size: 18px !important;
+}
+
+/* Dialog and modals */
+.modal-title,
+.dialog-title {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+}
+
+.modal-body,
+.dialog-body {
+    font-size: 18px !important;
+}
+
+/* Dropdowns and selects */
+.dropdown-menu,
+.select2-results {
+    font-size: 18px !important;
+}
+
+.dropdown-item {
+    font-size: 18px !important;
+    padding: 12px 16px !important;
+    min-height: 44px !important;
+}
+
+/* Badges and tags */
+.badge,
+.tag {
+    font-size: 16px !important;
+    padding: 6px 12px !important;
+}
+
+/* Tooltips */
+.tooltip {
+    font-size: 16px !important;
+}
+
+/* Status badges */
+.status-badge {
+    font-size: 16px !important;
+    padding: 8px 14px !important;
+}
+
+/* Search and filters */
+.search-input,
+.filter-input {
+    font-size: 18px !important;
+    padding: 12px 16px !important;
+    min-height: 48px !important;
+}
+
+/* Icons - slightly larger */
+.fa,
+.icon {
+    font-size: 1.2em !important;
+}
+
+/* Lead cards (mobile view) */
+.lead-card {
+    font-size: 18px !important;
+}
+
+.lead-card-name {
+    font-size: 22px !important;
+}
+
+.lead-card-phone {
+    font-size: 18px !important;
+}
+
+.lead-card-action-button {
+    font-size: 16px !important;
+    padding: 12px 16px !important;
+    min-height: 48px !important;
+}
+
+/* Data tables */
+.datatable {
+    font-size: 18px !important;
+}
+
+.datatable th {
+    font-size: 16px !important;
+    padding: 14px 12px !important;
+}
+
+.datatable td {
+    font-size: 18px !important;
+    padding: 14px 12px !important;
+}
+
+/* Comments and timeline */
+.comment-content,
+.timeline-content {
+    font-size: 18px !important;
+}
+
+/* Dashboard widgets */
+.widget-title {
+    font-size: 20px !important;
+}
+
+.widget-value {
+    font-size: 28px !important;
+}
+
+/* Checkboxes and radio buttons */
+input[type="checkbox"],
+input[type="radio"] {
+    width: 20px !important;
+    height: 20px !important;
+    margin-right: 10px !important;
+}
+
+/* Links */
+a {
+    font-size: 18px !important;
+}
+
+/* Breadcrumbs */
+.breadcrumb {
+    font-size: 16px !important;
+}
+
+/* Page titles */
+.page-title {
+    font-size: 28px !important;
+}
+
+/* Alerts and messages */
+.alert,
+.msgprint {
+    font-size: 18px !important;
+    padding: 16px 20px !important;
+}
+
+/* Loading indicators */
+.spinner {
+    width: 40px !important;
+    height: 40px !important;
+}
+
+/* Increase spacing for better readability */
+.form-group {
+    margin-bottom: 20px !important;
+}
+
+/* Increase padding in containers */
+.form-container,
+.page-container {
+    padding: 24px !important;
+}
+
+/* Increase line height for better readability */
+p,
+span,
+div {
+    line-height: 1.6 !important;
+}
+
+/* Increase icon sizes in buttons */
+.btn .fa,
+button .fa {
+    font-size: 1.1em !important;
+    margin-right: 8px !important;
+}
+
+/* Increase spacing in lists */
+.list-group-item {
+    font-size: 18px !important;
+    padding: 16px !important;
+    min-height: 56px !important;
+}
+
+/* Increase size of form checkboxes and radios */
+.form-check-input {
+    width: 20px !important;
+    height: 20px !important;
+    margin-top: 4px !important;
+}
+
+.form-check-label {
+    font-size: 18px !important;
+    margin-left: 8px !important;
+}
+
+/* Increase size of switches */
+.switch {
+    width: 50px !important;
+    height: 28px !important;
+}
+
+/* Increase padding in cards */
+.card {
+    padding: 24px !important;
+}
+
+.card-header {
+    font-size: 20px !important;
+    padding: 16px 24px !important;
+}
+
+.card-body {
+    font-size: 18px !important;
+    padding: 24px !important;
+}
+
+/* Increase size of tabs */
+.nav-tabs .nav-link {
+    font-size: 18px !important;
+    padding: 14px 20px !important;
+}
+
+/* Increase size of pagination */
+.pagination .page-link {
+    font-size: 18px !important;
+    padding: 12px 16px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+}
+
+/* Increase size of search results */
+.search-result {
+    font-size: 18px !important;
+    padding: 16px !important;
+}
+
+/* Increase size of notifications */
+.notification-item {
+    font-size: 18px !important;
+    padding: 16px !important;
+}
+
+/* Increase size of workspace items */
+.workspace-item {
+    font-size: 18px !important;
+    padding: 16px !important;
+    min-height: 60px !important;
+}
+
+/* Increase size of menu items */
+.menu-item {
+    font-size: 18px !important;
+    padding: 14px 16px !important;
+    min-height: 50px !important;
+}
+
+/* Increase size of action buttons in forms */
+.form-actions .btn {
+    font-size: 18px !important;
+    padding: 12px 24px !important;
+    margin: 0 8px !important;
+}
+
+/* Increase size of field help text */
+.help-text,
+.help-block {
+    font-size: 16px !important;
+    margin-top: 8px !important;
+}
+
+/* Increase size of required field indicators */
+.reqd {
+    font-size: 18px !important;
+}
+
+/* Increase size of error messages */
+.error-message,
+.text-danger {
+    font-size: 16px !important;
+}
+
+/* Increase size of success messages */
+.success-message,
+.text-success {
+    font-size: 16px !important;
+}
+
+/* Increase size of info messages */
+.info-message,
+.text-info {
+    font-size: 16px !important;
+}
+
+/* Increase size of warning messages */
+.warning-message,
+.text-warning {
+    font-size: 16px !important;
+}
+
+/* Responsive adjustments for very large screens */
+@media (min-width: 1920px) {
+    :root {
+        --text-base: 20px !important;
+        --text-sm: 18px !important;
+        --text-xs: 16px !important;
+        --text-lg: 22px !important;
+        --text-xl: 24px !important;
+        --text-2xl: 26px !important;
+        --text-3xl: 30px !important;
+    }
+    
+    body {
+        font-size: 20px !important;
+    }
+    
+    .form-control,
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="date"],
+    input[type="time"],
+    select,
+    textarea {
+        font-size: 20px !important;
+        padding: 14px 18px !important;
+        min-height: 52px !important;
+    }
+    
+    .btn,
+    button {
+        font-size: 20px !important;
+        padding: 14px 28px !important;
+        min-height: 52px !important;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+

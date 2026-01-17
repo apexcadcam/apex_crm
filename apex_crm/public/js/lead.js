@@ -9,6 +9,7 @@ frappe.ui.form.on('Lead', {
 		// Hide standard child tables, we use custom UI
 		frm.set_df_property('interaction_history', 'hidden', 1);
 		frm.set_df_property('smart_contact_details', 'hidden', 1);
+		frm.set_df_property('smart_contact_summary', 'hidden', 1);
 
 		apex_crm.render_contacts(frm);
 		apex_crm.render_interaction_history(frm);
@@ -21,16 +22,88 @@ apex_crm.render_contacts = function (frm) {
 
 	// Unbind previous events
 	$(wrapper).off('click');
+	$(wrapper).off('change'); // Catch switcher changes
 	$(wrapper).off('keypress');
-	$(wrapper).off('change');
 	$(wrapper).empty();
 
 	// Add Dashboard Container
 	$(wrapper).append('<div class="dashboard-row" style="margin-bottom: 15px;"></div>');
-	// Render Dash content immediately if cached or wait for separate call?
-	// It's handled by render_dashboard_summary targeting .dashboard-row
 
 	let contacts = frm.doc.smart_contact_details || [];
+
+	// --- Switcher Widget Logic ---
+	let switcherHtml = '';
+
+	// Helper to get actions for a specific contact object
+	const getActions = (c) => {
+		let type = c.type;
+		let val = c.value;
+		let clean = (val || '').replace(/[^0-9]/g, '');
+		let html = '';
+
+		const btnStyle = "font-size: 18px; margin: 0 4px; text-decoration: none; vertical-align: middle; display: inline-block;";
+
+		if (['Mobile', 'Phone'].includes(type) || type.includes('Mobile')) {
+			let waNum = (c.country_code || '').replace('+', '') + clean;
+			html += `<a href="https://wa.me/${waNum}" target="_blank" style="${btnStyle} color: #25D366;" title="WhatsApp"><i class="fa fa-whatsapp"></i></a>`;
+			html += `<a href="tel:${c.country_code || ''}${clean}" target="_blank" style="${btnStyle} color: #00b65e; margin-left: 6px;" title="Call"><i class="fa fa-phone"></i></a>`;
+			html += `<a href="sms:${c.country_code || ''}${clean}" target="_blank" style="${btnStyle} color: #f39c12; margin-left: 6px;" title="Message"><i class="fa fa-comment"></i></a>`;
+		} else if (type === 'WhatsApp') {
+			let waNum = (c.country_code || '').replace('+', '') + clean;
+			html += `<a href="https://wa.me/${waNum}" target="_blank" style="${btnStyle} color: #25D366;" title="WhatsApp"><i class="fa fa-whatsapp"></i></a>`;
+		} else if (type === 'Email') {
+			html += `<a href="mailto:${val}" style="${btnStyle} color: #EA4335;" title="Email"><i class="fa fa-envelope"></i></a>`;
+		} else if (['Address', 'Location', 'Maps'].includes(type) || type.includes('Address')) {
+			html += `<a href="https://maps.google.com/?q=${encodeURIComponent(val)}" target="_blank" style="${btnStyle} color: #673ab7;" title="Map"><i class="fa fa-home"></i></a>`;
+		} else if (type === 'Website') {
+			let href = val.startsWith('http') ? val : 'http://' + val;
+			html += `<a href="${href}" target="_blank" style="${btnStyle} color: #333;" title="Website"><i class="fa fa-globe"></i></a>`;
+		} else if (type === 'Facebook') {
+			let href = val.startsWith('http') ? val : 'https://facebook.com/' + val;
+			html += `<a href="${href}" target="_blank" style="${btnStyle} color: #1877F2;" title="Facebook"><i class="fa fa-facebook-f"></i></a>`;
+		}
+		return html;
+	};
+
+	if (contacts.length > 0) {
+		let optionsHtml = contacts.map((c, i) => {
+			return `<option value="${i}">${c.type}: ${c.value}</option>`;
+		}).join('');
+
+		let c0 = contacts[0];
+		let iso0 = apex_crm.get_iso_from_dial_code(c0.country_code || '');
+		let flag0 = '';
+		if (iso0) {
+			flag0 = `<img src="https://flagcdn.com/20x15/${iso0}.png" style="vertical-align: middle; border-radius: 2px;">`;
+		}
+
+		let val0 = c0.value;
+		// Format logic similar to list: add code if numeric and missing
+		if (c0.country_code && !val0.startsWith('+') && !val0.startsWith('00') && /^[0-9]+$/.test(val0)) {
+			val0 = c0.country_code + ' ' + val0;
+		}
+		let displayVal = val0.replace(/[|📱☎️📧📍🌐🏠]/g, '').trim();
+		let icons0 = getActions(c0);
+
+		switcherHtml = `
+        <div class="contact-switcher-widget" style="margin-bottom: 20px;">
+             <div class="small text-muted" style="margin-bottom: 5px; font-weight: 500;">${__('Contact Details')}</div>
+             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <div class="switcher-display" style="position: relative; background: #fff; border: 1px solid #d1d8dd; border-radius: 8px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 8px; min-width: 240px; max-width: 320px; cursor: pointer; height: 34px;">
+                        <span class="sw-flag">${flag0}</span>
+                        <span class="sw-value" style="font-weight: 400; color: #1f272e; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${displayVal}</span>
+                        <i class="fa fa-caret-down" style="margin-left: auto; color: #888; font-size: 12px;"></i>
+                        <select class="switcher-select" style="position: absolute; top:0; left:0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                            ${optionsHtml}
+                        </select>
+                  </div>
+                  <div class="sw-actions" style="display: flex; gap: 8px; align-items: center;">
+                        ${icons0}
+                  </div>
+             </div>
+        </div>
+        `;
+	}
 
 	// Smart Default: First item = Mobile, Subsequent = Email
 	let is_empty = contacts.length === 0;
@@ -38,7 +111,6 @@ apex_crm.render_contacts = function (frm) {
 	let default_placeholder = is_empty ? 'Enter Mobile Number...' : 'name@example.com';
 
 	// Prepare Country List for Awesomplete
-	// Format: "Name (+Code) Flag"
 	let default_country_label = '';
 	let country_list = apex_crm.country_codes.map(c => {
 		let flag = apex_crm.get_flag_emoji(c.code);
@@ -48,14 +120,18 @@ apex_crm.render_contacts = function (frm) {
 	});
 
 	let html = `
-	<div class="apex-contact-manager" style="padding-top: 10px;">
+    <!-- Inject Switcher -->
+    ${switcherHtml}
+    
+	<div class="apex-contact-manager" style="padding-top: 5px;">
+        <!-- Header for List -->
+        <div class="small text-muted" style="margin-bottom: 8px; font-weight: 500;">${__('All Contacts')}</div>
 		<div class="contact-list" style="display: flex; flex-direction: column; gap: 12px;">
 			${contacts.map((row, index) => apex_crm.get_contact_card_html(row, index)).join('')}
 		</div>
 
 		<!-- Quick Add Row -->
 		<div class="quick-add-row" style="margin-top: 15px; display: flex; align-items: center; gap: 8px;">
-			
 			<!-- Type Selector -->
 			<div style="width: 130px;">
 				<select class="qa-type form-control input-sm">
@@ -104,6 +180,30 @@ apex_crm.render_contacts = function (frm) {
 	`;
 
 	$(wrapper).html(full_html);
+
+	// Bind Switcher Event
+	$(wrapper).find('.switcher-select').on('change', function () {
+		let idx = parseInt($(this).val());
+		let c = contacts[idx];
+
+		let iso = apex_crm.get_iso_from_dial_code(c.country_code || '');
+		let flagHtml = '';
+		if (iso) {
+			flagHtml = `<img src="https://flagcdn.com/20x15/${iso}.png" style="vertical-align: middle; border-radius: 2px;">`;
+		}
+
+		let actions = getActions(c);
+		let val = c.value;
+		if (c.country_code && !val.startsWith('+') && !val.startsWith('00') && /^[0-9]+$/.test(val)) {
+			val = c.country_code + ' ' + val;
+		}
+		let cleanVal = val.replace(/[|📱☎️📧📍🌐🏠]/g, '').trim();
+
+		let parent = $(this).closest('.contact-switcher-widget');
+		parent.find('.sw-flag').html(flagHtml);
+		parent.find('.sw-value').text(cleanVal);
+		parent.find('.sw-actions').html(actions);
+	});
 
 	// --- Initialize Awesomplete ---
 	// Using setTimeout to ensure DOM is ready inside wrapper
@@ -220,7 +320,10 @@ apex_crm.render_contacts = function (frm) {
 				}
 			},
 			error: function (r) {
-				console.error(r);
+				// Only log error in development mode
+				if (frappe.boot.developer_mode) {
+					console.error(r);
+				}
 			}
 		});
 	};
@@ -740,6 +843,18 @@ apex_crm.render_interaction_history = function (frm) {
 	// sort by timestamp desc
 	history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+	// Debug: Log voice notes for troubleshooting (only in development)
+	// Debug: Log voice notes only in development mode
+	if (frappe.boot.developer_mode) {
+		console.log('Interaction History - Voice Notes:', history.map(r => ({
+			timestamp: r.timestamp,
+			type: r.type,
+			voice_note: r.voice_note,
+			voice_note_type: typeof r.voice_note,
+			has_voice: !!(r.voice_note && String(r.voice_note).trim())
+		})));
+	}
+
 	let rows_html = history.map((row, index) => {
 		// Ensure row has a name (for saved rows) or use a unique identifier
 		if (!row.name && row.__name) {
@@ -782,6 +897,13 @@ apex_crm.render_interaction_history = function (frm) {
 		// Summary truncation
 		let summary = row.summary || '';
 
+		// Check if voice note exists (handle both string and object formats)
+		let voice_note_value = row.voice_note;
+		if (typeof voice_note_value === 'object' && voice_note_value !== null) {
+			voice_note_value = voice_note_value.file_url || voice_note_value.value || '';
+		}
+		let has_voice_note = voice_note_value && String(voice_note_value).trim() !== '';
+
 		// Use row identifier: name if exists, otherwise use timestamp + type as unique identifier
 		let row_id = row.name || `temp-${row.timestamp}-${row.type}-${index}`;
 
@@ -789,6 +911,7 @@ apex_crm.render_interaction_history = function (frm) {
 		<tr style="border-bottom: 1px solid #ebf1f1;" class="interaction-row" data-row-id="${row_id}">
 			<td style="padding: 10px; text-align: center;">
 				<i class="${type_icon}" style="font-size: 16px; color: ${type_color};"></i>
+				${has_voice_note ? `<i class="fa fa-microphone" style="font-size: 10px; color: #1976d2; margin-left: 3px;" title="Has Voice Note"></i>` : ''}
 			</td>
 			<td style="padding: 10px; color: #555; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${timestamp_display}</td>
 			<td style="padding: 10px;">
@@ -802,8 +925,19 @@ apex_crm.render_interaction_history = function (frm) {
 			<td style="padding: 10px; color: #555; font-size: 13px;">${frappe.format(row.duration, { fieldtype: 'Duration' }) || '-'}</td>
 			<td style="padding: 10px; font-size: 13px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0;" title="${summary}">
 				${summary}
+				${has_voice_note ? ' <i class="fa fa-volume-up" style="color: #1976d2; font-size: 11px;" title="Voice Note Available"></i>' : ''}
 			</td>
 			<td style="padding: 10px; text-align: center; white-space: nowrap;">
+				${has_voice_note ? `
+				<button type="button" class="btn btn-xs btn-info play-voice-btn" data-voice-url="${voice_note_value}" title="Play Voice Note" 
+					style="width: 20px; height: 20px; border-radius: 50%; background: #e3f2fd; color: #1976d2; 
+					display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
+					transition: all 0.15s ease; border: none; margin: 0 2px; padding: 0; outline: none;"
+					onmouseover="this.style.background='#bbdefb'; this.style.transform='scale(1.1)'" 
+					onmouseout="this.style.background='#e3f2fd'; this.style.transform='scale(1)'">
+					<i class="fa fa-volume-up" style="font-size: 9px;"></i>
+				</button>
+				` : ''}
 				<button type="button" class="btn btn-xs btn-default edit-interaction-btn" data-row-id="${row_id}" data-timestamp="${row.timestamp || ''}" data-type="${row.type || ''}" title="Edit" 
 					style="width: 20px; height: 20px; border-radius: 50%; background: #f0f4f8; color: #495057; 
 					display: inline-flex; align-items: center; justify-content: center; cursor: pointer; 
@@ -858,163 +992,137 @@ apex_crm.render_interaction_history = function (frm) {
 
 	// Bind Edit Event - using same pattern as Apex Contacts
 	$(wrapper).on('click', '.edit-interaction-btn', function (e) {
-			e.preventDefault();
-			e.stopPropagation();
-			
-			console.log('Edit button clicked!');
-			
-			// Prevent double-click
-			if ($(this).hasClass('editing')) {
-				console.log('Edit: Already editing, ignoring click');
-				return;
-			}
-			$(this).addClass('editing');
-			
-			let row_id = $(this).data('row-id');
-			let timestamp = $(this).data('timestamp');
-			let type = $(this).data('type');
-			
-			console.log('Edit: Searching for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
-			
-			// Find row by name or by timestamp + type
-			// IMPORTANT: Search in frm.doc.interaction_history (original order), not in sorted history
-			let row = null;
-			
-			// Try to find by name first (most reliable)
-			if (row_id && !row_id.startsWith('temp-')) {
-				row = frm.doc.interaction_history.find(r => r.name === row_id);
-				if (row) {
-					console.log('Edit: Found row by name:', row);
-				}
-			}
-			
-			// If not found by name, try by timestamp + type
-			if (!row && timestamp && type) {
-				// Normalize timestamp for comparison
-				let search_timestamp_normalized = timestamp ? timestamp.toString().substring(0, 16) : '';
-				
-				row = frm.doc.interaction_history.find(r => {
-					if (!r.timestamp || !r.type) return false;
-					let r_timestamp_normalized = r.timestamp.toString().substring(0, 16);
-					return r_timestamp_normalized === search_timestamp_normalized && r.type === type;
-				});
-				if (row) {
-					console.log('Edit: Found row by timestamp+type:', row);
-				}
-			}
-			
-			if (row) {
-				console.log('Edit: Opening dialog for row:', row);
-				apex_crm.edit_interaction_dialog(frm, row);
-				// Remove editing flag after dialog is shown
-				setTimeout(() => {
-					$(this).removeClass('editing');
-				}, 500);
-			} else {
-				console.error('Edit: Row not found! row_id:', row_id, 'Available rows:', frm.doc.interaction_history.map(r => ({name: r.name, timestamp: r.timestamp, type: r.type})));
-				// Remove editing flag if row not found
+		e.preventDefault();
+		e.stopPropagation();
+
+		// Prevent double-click
+		if ($(this).hasClass('editing')) {
+			return;
+		}
+		$(this).addClass('editing');
+
+		let row_id = $(this).data('row-id');
+		let timestamp = $(this).data('timestamp');
+		let type = $(this).data('type');
+
+		// Find row by name or by timestamp + type
+		// IMPORTANT: Search in frm.doc.interaction_history (original order), not in sorted history
+		let row = null;
+
+		// Try to find by name first (most reliable)
+		if (row_id && !row_id.startsWith('temp-')) {
+			row = frm.doc.interaction_history.find(r => r.name === row_id);
+		}
+
+		// If not found by name, try by timestamp + type
+		if (!row && timestamp && type) {
+			// Normalize timestamp for comparison
+			let search_timestamp_normalized = timestamp ? timestamp.toString().substring(0, 16) : '';
+
+			row = frm.doc.interaction_history.find(r => {
+				if (!r.timestamp || !r.type) return false;
+				let r_timestamp_normalized = r.timestamp.toString().substring(0, 16);
+				return r_timestamp_normalized === search_timestamp_normalized && r.type === type;
+			});
+		}
+
+		if (row) {
+			apex_crm.edit_interaction_dialog(frm, row);
+			// Remove editing flag after dialog is shown
+			setTimeout(() => {
 				$(this).removeClass('editing');
+			}, 500);
+		} else {
+			// Only log error in development mode
+			if (frappe.boot.developer_mode) {
+				console.error('Edit: Row not found! row_id:', row_id, 'Available rows:', frm.doc.interaction_history.map(r => ({ name: r.name, timestamp: r.timestamp, type: r.type })));
 			}
-		});
-	
-	console.log('Edit event handlers bound. Found buttons:', $(wrapper).find('.edit-interaction-btn').length);
+			// Remove editing flag if row not found
+			$(this).removeClass('editing');
+		}
+	});
+
+	// Debug: Log button count only in development mode
+	if (frappe.boot.developer_mode) {
+		console.log('Edit event handlers bound. Found buttons:', $(wrapper).find('.edit-interaction-btn').length);
+	}
 
 	// Bind Delete Event - using same pattern as Apex Contacts
 	$(wrapper).on('click', '.delete-interaction-btn', function (e) {
 		e.preventDefault();
 		e.stopPropagation();
-		
+
 		// Prevent double-click
 		if ($(this).hasClass('deleting')) {
 			return;
 		}
 		$(this).addClass('deleting');
-		
+
 		let row_id = $(this).data('row-id');
 		let timestamp = $(this).data('timestamp');
 		let type = $(this).data('type');
-		
-		console.log('Delete clicked for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
-		
+
 		// Use row_id, timestamp, type directly in callback (they're in closure scope)
-		frappe.confirm('Are you sure you want to delete this interaction?', function() {
+		frappe.confirm('Are you sure you want to delete this interaction?', function () {
 			// Find row by name or by timestamp + type
 			// IMPORTANT: Search in frm.doc.interaction_history (original order), not in sorted history
 			let row = null;
 			let row_index = -1;
-			
-			// Debug: Log what we're searching for
-			console.log('Delete: Searching for row_id:', row_id, 'timestamp:', timestamp, 'type:', type);
-			console.log('Delete: Available rows:', frm.doc.interaction_history.map((r, idx) => ({
-				index: idx,
-				name: r.name,
-				timestamp: r.timestamp,
-				type: r.type
-			})));
-			
+
 			// Try to find by name first (most reliable)
 			if (row_id && !row_id.startsWith('temp-')) {
 				row_index = frm.doc.interaction_history.findIndex(r => r.name === row_id);
 				if (row_index >= 0) {
 					row = frm.doc.interaction_history[row_index];
-					console.log('Delete: Found by name at index:', row_index, 'row name:', row.name);
-				} else {
-					console.log('Delete: Not found by name, row_id:', row_id, 'Available names:', frm.doc.interaction_history.map(r => r.name));
 				}
 			}
-			
+
 			// If not found by name, try by timestamp + type
 			if (row_index < 0 && timestamp && type) {
 				// Normalize timestamp for comparison
 				let search_timestamp_normalized = timestamp ? timestamp.toString().substring(0, 16) : '';
-				
+
 				row_index = frm.doc.interaction_history.findIndex(r => {
 					if (!r.timestamp || !r.type) return false;
 					let r_timestamp_normalized = r.timestamp.toString().substring(0, 16);
 					return r_timestamp_normalized === search_timestamp_normalized && r.type === type;
 				});
-				
+
 				if (row_index >= 0) {
 					row = frm.doc.interaction_history[row_index];
-					console.log('Delete: Found by timestamp+type at index:', row_index, 'row name:', row.name);
-				} else {
-					console.log('Delete: Not found by timestamp+type');
 				}
 			}
-			
+
 			if (row && row_index >= 0) {
-				console.log('Delete: Deleting row at index:', row_index, 'row name:', row.name);
-				
 				// Store row name before removal
 				let row_name = row.name;
-				
+
 				// Remove from array first (same pattern as delete_contact)
 				frm.doc.interaction_history.splice(row_index, 1);
-				console.log('Delete: Row removed from array');
-				
+
 				// Remove from locals if it has a name (saved row)
 				if (row_name) {
 					frappe.model.remove_from_locals("Apex Interaction Log", row_name);
-					console.log('Delete: Row removed from locals:', row_name);
 				}
 
-			// Refresh UI immediately
-			frm.refresh_field('interaction_history');
-			
-			// Mark form as dirty so changes can be saved
-			frm.dirty();
-			
-			// Re-render custom UI
-			apex_crm.render_interaction_history(frm);
-			
-			// Save changes
-			frm.save(null, function() {
-				console.log('Delete: Row deleted and saved');
-			});
+				// Refresh UI immediately
+				frm.refresh_field('interaction_history');
+
+				// Mark form as dirty so changes can be saved
+				frm.dirty();
+
+				// Re-render custom UI
+				apex_crm.render_interaction_history(frm);
+
+				// Save changes
+				frm.save();
 			} else {
-				console.error('Delete: Row not found! row_id:', row_id, 'row_index:', row_index, 'Available:', frm.doc.interaction_history.map((r, idx) => ({index: idx, name: r.name})));
+				// Only log error in development mode
+				if (frappe.boot.developer_mode) {
+					console.error('Delete: Row not found! row_id:', row_id, 'row_index:', row_index, 'Available:', frm.doc.interaction_history.map((r, idx) => ({ index: idx, name: r.name })));
+				}
 			}
-			
+
 			// Remove deleting flag after a delay
 			setTimeout(() => {
 				$(wrapper).find('.delete-interaction-btn').removeClass('deleting');
@@ -1023,6 +1131,36 @@ apex_crm.render_interaction_history = function (frm) {
 			// Cancel callback - remove deleting flag
 			$(wrapper).find('.delete-interaction-btn').removeClass('deleting');
 		});
+	});
+
+	// Bind Play Voice Note Event
+	$(wrapper).on('click', '.play-voice-btn', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		let voice_url = $(this).data('voice-url');
+		if (voice_url) {
+			// Get full URL if it's a relative path
+			if (voice_url.startsWith('/files/')) {
+				voice_url = window.location.origin + voice_url;
+			}
+
+			// Create audio element and play
+			let audio = new Audio(voice_url);
+			audio.play().catch(err => {
+				// Only log error in development mode
+				if (frappe.boot.developer_mode) {
+					console.error('Error playing voice note:', err);
+				}
+				frappe.msgprint(__('Error playing voice note. Please check the file.'));
+			});
+
+			// Show playing indicator
+			frappe.show_alert({
+				message: __('Playing voice note...'),
+				indicator: 'blue'
+			}, 2);
+		}
 	});
 };
 
@@ -1224,6 +1362,13 @@ apex_crm.edit_interaction_dialog = function (frm, row) {
 				fieldname: 'summary',
 				fieldtype: 'Small Text',
 				default: row.summary || ''
+			},
+			{
+				label: 'Voice Note',
+				fieldname: 'voice_note',
+				fieldtype: 'Attach',
+				default: row.voice_note || '',
+				description: 'Record or upload a voice note'
 			}
 		],
 		primary_action_label: 'Save',
@@ -1233,17 +1378,19 @@ apex_crm.edit_interaction_dialog = function (frm, row) {
 				frappe.model.set_value(row.doctype, row.name, 'status', values.status);
 				frappe.model.set_value(row.doctype, row.name, 'duration', values.duration);
 				frappe.model.set_value(row.doctype, row.name, 'summary', values.summary);
+				frappe.model.set_value(row.doctype, row.name, 'voice_note', values.voice_note);
 			} else {
 				// Unsaved row - set directly
 				row.status = values.status;
 				row.duration = values.duration;
 				row.summary = values.summary;
+				row.voice_note = values.voice_note;
 			}
 			frm.refresh_field('interaction_history');
-			
+
 			// Mark form as dirty so changes can be saved
 			frm.dirty();
-			
+
 			frm.save().then(() => {
 				// Re-render interaction history after save
 				apex_crm.render_interaction_history(frm);
@@ -1251,54 +1398,141 @@ apex_crm.edit_interaction_dialog = function (frm, row) {
 			d.hide();
 		}
 	});
+
+	// Show dialog first
 	d.show();
+
+	// Add voice recording button after dialog is rendered
+	setTimeout(function () {
+		let voice_field = d.get_field('voice_note');
+		if (voice_field && voice_field.$wrapper) {
+			// Add record button next to attach field
+			let record_btn = $(`
+				<button type="button" class="btn btn-sm btn-primary record-voice-btn" 
+					style="margin-top: 5px; margin-left: 5px;">
+					<i class="fa fa-microphone"></i> Record Voice
+				</button>
+			`);
+
+			voice_field.$wrapper.append(record_btn);
+
+			// Voice recording state
+			let is_recording = false;
+			let media_recorder = null;
+			let audio_chunks = [];
+
+			record_btn.on('click', function () {
+				if (!is_recording) {
+					// Start recording
+					if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+						frappe.msgprint(__('Your browser does not support voice recording.'));
+						return;
+					}
+
+					navigator.mediaDevices.getUserMedia({ audio: true })
+						.then(function (stream) {
+							media_recorder = new MediaRecorder(stream);
+							audio_chunks = [];
+
+							media_recorder.ondataavailable = function (event) {
+								if (event.data.size > 0) {
+									audio_chunks.push(event.data);
+								}
+							};
+
+							media_recorder.onstop = function () {
+								let audio_blob = new Blob(audio_chunks, { type: 'audio/webm' });
+
+								// Create file name
+								let filename = 'voice_note_' + frappe.datetime.get_datetime_as_string().replace(/[^0-9]/g, '') + '.webm';
+
+								// Upload file using Frappe's file uploader with FormData
+								let form_data = new FormData();
+								form_data.append('file', audio_blob, filename);
+								form_data.append('is_private', 1);
+
+								// Use XMLHttpRequest to upload file
+								let xhr = new XMLHttpRequest();
+								xhr.open('POST', '/api/method/upload_file', true);
+								xhr.setRequestHeader('X-Frappe-CSRF-Token', frappe.csrf_token);
+
+								xhr.onload = function () {
+									if (xhr.status === 200) {
+										try {
+											let response = JSON.parse(xhr.responseText);
+											if (response.message && response.message.file_url) {
+												// Set the voice_note field
+												d.set_value('voice_note', response.message.file_url);
+												frappe.show_alert({
+													message: __('Voice note recorded and attached'),
+													indicator: 'green'
+												}, 3);
+											} else {
+												frappe.msgprint(__('Error uploading voice note.'));
+											}
+										} catch (e) {
+											// Only log error in development mode
+											if (frappe.boot.developer_mode) {
+												console.error('Error parsing response:', e);
+											}
+											frappe.msgprint(__('Error uploading voice note.'));
+										}
+									} else {
+										frappe.msgprint(__('Error uploading voice note.'));
+									}
+								};
+
+								xhr.onerror = function () {
+									frappe.msgprint(__('Error uploading voice note.'));
+								};
+
+								xhr.send(form_data);
+
+								// Stop all tracks
+								stream.getTracks().forEach(track => track.stop());
+							};
+
+							media_recorder.start();
+							is_recording = true;
+							record_btn.html('<i class="fa fa-stop"></i> Stop Recording');
+							record_btn.removeClass('btn-primary').addClass('btn-danger');
+							frappe.show_alert({
+								message: __('Recording started...'),
+								indicator: 'orange'
+							}, 2);
+						})
+						.catch(function (err) {
+							// Only log error in development mode
+							if (frappe.boot.developer_mode) {
+								console.error('Error accessing microphone:', err);
+							}
+							frappe.msgprint(__('Error accessing microphone. Please check permissions and allow microphone access.'));
+						});
+				} else {
+					// Stop recording
+					if (media_recorder && media_recorder.state !== 'inactive') {
+						media_recorder.stop();
+					}
+					is_recording = false;
+					record_btn.html('<i class="fa fa-microphone"></i> Record Voice');
+					record_btn.removeClass('btn-danger').addClass('btn-primary');
+					frappe.show_alert({
+						message: __('Recording stopped. Uploading...'),
+						indicator: 'blue'
+					}, 2);
+				}
+			});
+		}
+	}, 500);
 };
 
+
 apex_crm.log_interaction = function (frm, type, value) {
-	// 1. Add row to Interaction Log
-	let row = frappe.model.add_child(frm.doc, 'Apex Interaction Log', 'interaction_history');
-	
-	// Ensure type matches the exact options in the DocType
-	// Valid options: "Call", "WhatsApp", "SMS", "Email", "Facebook", "Instagram", "LinkedIn", "Telegram", "TikTok", "Snapchat", "X", "Location", "Other"
-	// Map any variations to the correct value
-	let valid_type = type;
-	if (type && typeof type === 'string') {
-		valid_type = type.trim();
-		// Ensure it matches exactly (case-sensitive)
-		const valid_types = ["Call", "WhatsApp", "SMS", "Email", "Facebook", "Instagram", "LinkedIn", "Telegram", "TikTok", "Snapchat", "X", "Location", "Other"];
-		if (!valid_types.includes(valid_type)) {
-			console.warn(`Invalid interaction type: "${type}", defaulting to "Other"`);
-			valid_type = "Other";
-		}
-	} else {
-		valid_type = "Other";
-	}
-	
-	// Set the type using frappe.model.set_value to ensure proper validation
-	frappe.model.set_value(row.doctype, row.name, 'type', valid_type);
+	// Define Dialog Logic First
+	let show_dialog = function () {
+		// Use a stable timestamp if we need to reconcile later
+		// But with API insert, we just need to pass data.
 
-	// Use a stable timestamp for lookup
-	let timestamp = frappe.datetime.now_datetime();
-	row.timestamp = timestamp;
-
-	row.user = frappe.session.user;
-	row.status = 'Attempted'; // Default
-
-	frm.refresh_field('interaction_history');
-
-	// 2. Save Form immediately to persist log
-	// Use callback instead of promise for compatibility
-	frm.save(null, () => {
-		// Re-render interaction history after save
-		apex_crm.render_interaction_history(frm);
-	}, () => {
-		// If save fails, still re-render
-		apex_crm.render_interaction_history(frm);
-	});
-
-	// 3. Show "Interaction Details" Prompt (Non-blocking)
-	// We use a small delay to let the user switch focus back to the CRM after the call/chat
-	setTimeout(() => {
 		let d = new frappe.ui.Dialog({
 			title: `Log ${type} Details`,
 			fields: [
@@ -1306,7 +1540,7 @@ apex_crm.log_interaction = function (frm, type, value) {
 					label: 'Status',
 					fieldname: 'status',
 					fieldtype: 'Select',
-					options: 'Attempted\nConnected\nBusy\nNo Answer\nLeft Message\nScheduled',
+					options: 'Attempted\nConnected\nBusy\nNo Answer\nLeft Message\nScheduled\nCompleted\nAnswered',
 					default: 'Attempted',
 					reqd: 1
 				},
@@ -1320,28 +1554,129 @@ apex_crm.log_interaction = function (frm, type, value) {
 					label: 'Summary / Notes',
 					fieldname: 'summary',
 					fieldtype: 'Small Text'
+				},
+				{
+					label: 'Voice Note',
+					fieldname: 'voice_note',
+					fieldtype: 'Attach',
+					description: 'Record or upload a voice note'
 				}
 			],
-			primary_action_label: 'Update Log',
+			primary_action_label: __('Save Log'),
 			primary_action: function (values) {
-				// Find the row by TIMESTAMP & TYPE instead of name (which changes on save)
-				let history = frm.doc.interaction_history || [];
-				// We look for a row that matches the timestamp we created
-				let target_row = history.find(r => r.timestamp === timestamp && r.type === type);
+				// Call Server API directly (bypasses parent save triggers)
+				frappe.call({
+					method: 'apex_crm.api.log_interaction',
+					args: {
+						lead: frm.doc.name,
+						type: type,
+						status: values.status,
+						summary: values.summary,
+						duration: values.duration,
+						voice_note: values.voice_note
+					},
+					freeze: true,
+					freeze_message: __('Logging Interaction...'),
+					callback: function (r) {
+						if (!r.exc) {
+							frappe.show_alert({ message: __('Interaction Logged Successfully'), indicator: 'green' });
+							d.hide();
 
-				if (target_row) {
-					frappe.model.set_value(target_row.doctype, target_row.name, 'status', values.status);
-					frappe.model.set_value(target_row.doctype, target_row.name, 'duration', values.duration);
-					frappe.model.set_value(target_row.doctype, target_row.name, 'summary', values.summary);
-
-					frm.save().then(() => {
-						// Re-render interaction history after save
-						apex_crm.render_interaction_history(frm);
-					});
-				}
-				d.hide();
+							// Reload doc to sync child table without saving parent
+							frm.reload_doc();
+						}
+					}
+				});
 			}
 		});
+
 		d.show();
-	}, 2000); // 2 second delay to allow app switch
+
+		// Add voice recording button logic (same as before)
+		setTimeout(function () {
+			let voice_field = d.get_field('voice_note');
+			if (voice_field && voice_field.$wrapper) {
+				let record_btn = $(`
+                    <button type="button" class="btn btn-sm btn-primary record-voice-btn" 
+                        style="margin-top: 5px; margin-left: 5px;">
+                        <i class="fa fa-microphone"></i> Record Voice
+                    </button>
+                `);
+				voice_field.$wrapper.append(record_btn);
+
+				let is_recording = false;
+				let media_recorder = null;
+				let audio_chunks = [];
+
+				record_btn.on('click', function () {
+					if (!is_recording) {
+						if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+							frappe.msgprint(__('Your browser does not support voice recording.'));
+							return;
+						}
+
+						navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+							media_recorder = new MediaRecorder(stream);
+							audio_chunks = [];
+
+							media_recorder.ondataavailable = function (event) {
+								if (event.data.size > 0) audio_chunks.push(event.data);
+							};
+
+							media_recorder.onstop = function () {
+								let audio_blob = new Blob(audio_chunks, { type: 'audio/webm' });
+								let filename = 'voice_note_' + frappe.datetime.get_datetime_as_string().replace(/[^0-9]/g, '') + '.webm';
+								let form_data = new FormData();
+								form_data.append('file', audio_blob, filename);
+								form_data.append('is_private', 1);
+
+								let xhr = new XMLHttpRequest();
+								xhr.open('POST', '/api/method/upload_file', true);
+								xhr.setRequestHeader('X-Frappe-CSRF-Token', frappe.csrf_token);
+
+								xhr.onload = function () {
+									if (xhr.status === 200) {
+										try {
+											let response = JSON.parse(xhr.responseText);
+											if (response.message && response.message.file_url) {
+												d.set_value('voice_note', response.message.file_url);
+												frappe.show_alert({ message: __('Voice note recorded'), indicator: 'green' });
+											}
+										} catch (e) { console.error(e); }
+									}
+								};
+								xhr.send(form_data);
+								stream.getTracks().forEach(track => track.stop());
+							};
+
+							media_recorder.start();
+							is_recording = true;
+							record_btn.html('<i class="fa fa-stop"></i> Stop Recording').removeClass('btn-primary').addClass('btn-danger');
+							frappe.show_alert({ message: __('Recording started...'), indicator: 'orange' });
+						}).catch(function (err) {
+							console.error(err);
+							frappe.msgprint(__('Error accessing microphone.'));
+						});
+					} else {
+						if (media_recorder && media_recorder.state !== 'inactive') media_recorder.stop();
+						is_recording = false;
+						record_btn.html('<i class="fa fa-microphone"></i> Record Voice').removeClass('btn-danger').addClass('btn-primary');
+						frappe.show_alert({ message: __('Recording stopped. Uploading...'), indicator: 'blue' });
+					}
+				});
+			}
+		}, 500);
+	};
+
+	// Open link automatically if value exists (unless user just clicked Log button without action)
+	// NOTE: The anchor tag href usually handles the action.
+	// If this function is called manually (not via href click), we might trigger it.
+	// But in `lead.js` the icons are `<a>` tags with `log-interaction` class.
+	// They have both `href` AND click handler. `href` fires, and click handler fires.
+	// We just show the dialog safely after a delay.
+
+	setTimeout(() => {
+		show_dialog();
+	}, 1500); // Check if 1.5s is good UX.
 };
+

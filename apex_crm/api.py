@@ -7,6 +7,176 @@ from werkzeug.wrappers import Response
 
 
 @frappe.whitelist()
+def search_leads_advanced(search_type, search_value):
+	"""
+	Advanced search for Leads based on different criteria.
+	
+	Args:
+		search_type: 'name', 'phone', 'note', 'email', 'all'
+		search_value: The search term
+	
+	Returns:
+		List of Lead names (IDs) matching the search criteria
+	"""
+	if not search_value or not search_value.strip():
+		return []
+	
+	search_value = search_value.strip()
+	lead_ids = set()
+	
+	if search_type == 'name':
+		# Search in lead_name and name (Lead ID) using SQL
+		leads = frappe.db.sql("""
+			SELECT name 
+			FROM `tabLead` 
+			WHERE lead_name LIKE %s OR name LIKE %s
+		""", (f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		lead_ids.update([l.name for l in leads])
+	
+	elif search_type == 'phone':
+		# Search in Apex Contact Detail for phone numbers
+		# Also search in old custom fields (custom_mobile_number_1, custom_mobile_number_2, custom_whatsapp_number)
+		# Normalize phone number (remove non-digits for better matching)
+		normalized_search = ''.join(filter(str.isdigit, search_value))
+		
+		# Search in contact details (new format)
+		contacts = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabApex Contact Detail` 
+			WHERE parenttype='Lead' 
+			AND (
+				value LIKE %s 
+				OR REPLACE(REPLACE(REPLACE(REPLACE(value, ' ', ''), '-', ''), '(', ''), ')', '') LIKE %s
+			)
+			AND type IN ('Mobile', 'Phone', 'WhatsApp', 'Telegram')
+		""", (f'%{search_value}%', f'%{normalized_search}%'), as_dict=True)
+		
+		lead_ids.update([c.parent for c in contacts])
+		
+		# Also search in old custom fields (for backward compatibility)
+		old_leads = frappe.db.sql("""
+			SELECT name 
+			FROM `tabLead` 
+			WHERE custom_mobile_number_1 LIKE %s 
+			   OR custom_mobile_number_2 LIKE %s 
+			   OR custom_whatsapp_number LIKE %s
+		""", (f'%{search_value}%', f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		lead_ids.update([l.name for l in old_leads])
+	
+	elif search_type == 'note':
+		# Search in CRM Notes (child table)
+		notes = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabCRM Note` 
+			WHERE parenttype='Lead' 
+			AND parentfield='notes'
+			AND note LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		
+		lead_ids.update([n.parent for n in notes if n.parent])
+		
+		# Search in Interaction History summary
+		interactions = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabApex Interaction Log` 
+			WHERE parenttype='Lead' 
+			AND summary LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		
+		lead_ids.update([i.parent for i in interactions])
+		
+		# Also search in Comments (Communication DocType)
+		comments = frappe.db.sql("""
+			SELECT DISTINCT reference_name as parent
+			FROM `tabCommunication`
+			WHERE reference_doctype='Lead'
+			AND (
+				content LIKE %s
+				OR subject LIKE %s
+			)
+		""", (f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		
+		lead_ids.update([c.parent for c in comments if c.parent])
+	
+	elif search_type == 'email':
+		# Search in Apex Contact Detail for email
+		contacts = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabApex Contact Detail` 
+			WHERE parenttype='Lead' 
+			AND type='Email' 
+			AND value LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		
+		lead_ids.update([c.parent for c in contacts])
+	
+	elif search_type == 'all':
+		# Search in all fields (like Lead Search in Form)
+		# 1. Name (lead_name and name/ID)
+		leads = frappe.db.sql("""
+			SELECT name 
+			FROM `tabLead` 
+			WHERE lead_name LIKE %s OR name LIKE %s
+		""", (f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		lead_ids.update([l.name for l in leads])
+		
+		# 2. Contact Details (new format)
+		contacts = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabApex Contact Detail` 
+			WHERE parenttype='Lead' 
+			AND value LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		lead_ids.update([c.parent for c in contacts])
+		
+		# 2b. Old custom fields (for backward compatibility)
+		old_leads = frappe.db.sql("""
+			SELECT name 
+			FROM `tabLead` 
+			WHERE custom_mobile_number_1 LIKE %s 
+			   OR custom_mobile_number_2 LIKE %s 
+			   OR custom_whatsapp_number LIKE %s
+		""", (f'%{search_value}%', f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		lead_ids.update([l.name for l in old_leads])
+		
+		# 3. CRM Notes (child table)
+		notes = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabCRM Note` 
+			WHERE parenttype='Lead' 
+			AND parentfield='notes'
+			AND note LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		
+		lead_ids.update([n.parent for n in notes if n.parent])
+		
+		# 4. Interaction History
+		interactions = frappe.db.sql("""
+			SELECT DISTINCT parent 
+			FROM `tabApex Interaction Log` 
+			WHERE parenttype='Lead' 
+			AND summary LIKE %s
+		""", f'%{search_value}%', as_dict=True)
+		lead_ids.update([i.parent for i in interactions])
+		
+		# 5. Comments (Communication DocType)
+		comments = frappe.db.sql("""
+			SELECT DISTINCT reference_name as parent
+			FROM `tabCommunication`
+			WHERE reference_doctype='Lead'
+			AND (
+				content LIKE %s
+				OR subject LIKE %s
+			)
+		""", (f'%{search_value}%', f'%{search_value}%'), as_dict=True)
+		
+		lead_ids.update([c.parent for c in comments if c.parent])
+	
+	return list(lead_ids)
+
+
+
+@frappe.whitelist()
 def check_duplicate_contact(value):
 	"""
 	Checks if a contact value (phone, email, etc.) exists in any Lead.
@@ -105,60 +275,111 @@ def get_duplicate_groups():
     Returns a list of values that appear more than once in Apex Contact Detail.
     Smart Filter: Excludes values ONLY IF current count matches 'ignored_count'.
     If count has changed (e.g. new duplicate added), it shows up again.
+    
+    OPTIMIZED: Uses single query with JOIN instead of N+1 queries.
     """
     
-    # 1. Get raw duplicates (Count > 1)
-    raw_duplicates = frappe.db.sql("""
-        SELECT value, COUNT(*) as count 
+    # Check Page Permission to ensure authorized access
+    if not has_page_permission('duplicate-manager'):
+        frappe.throw(_("You do not have permission to access Duplicate Manager."))
+    
+    # 1. Get Ignore List {value: ignored_count} - Do this first to filter early
+    ignored_list = frappe.db.get_all("Apex Ignored Duplicate", fields=["value", "ignored_count"], ignore_permissions=True)
+    ignored_map = {d.value: d.ignored_count for d in ignored_list}
+    
+    # 2. Get duplicate values (values that appear more than once)
+    duplicate_values = frappe.db.sql("""
+        SELECT value, COUNT(DISTINCT parent) as count 
         FROM `tabApex Contact Detail` 
         WHERE parenttype='Lead'
         GROUP BY value 
         HAVING count > 1
+        ORDER BY count DESC
     """, as_dict=True)
-
-
-
-    if not raw_duplicates:
+    
+    if not duplicate_values:
         return []
-
-    # Check Page Permission to ensure authorized access
-    # We allow access if the user has permission to the 'duplicate-manager' page.
-    if not has_page_permission('duplicate-manager'):
-        frappe.throw(_("You do not have permission to access Duplicate Manager."))
-
-    # 2. Get Ignore List {value: ignored_count}
-    # We ignore permissions here because if the user has Page access, they should be able to read this config.
-    ignored_list = frappe.db.get_all("Apex Ignored Duplicate", fields=["value", "ignored_count"], ignore_permissions=True)
-    ignored_map = {d.value: d.ignored_count for d in ignored_list}
-
-    results = []
-    for d in raw_duplicates:
+    
+    # 3. Filter out ignored values early (before fetching leads)
+    filtered_duplicates = []
+    for d in duplicate_values:
         val = d.value
         current_count = d.count
         
-        # SMART CHECK:
-        # If value is in ignore list AND current count == ignored count -> Skip
+        # SMART CHECK: Skip if ignored and count matches
         if val in ignored_map:
             if ignored_map[val] == current_count:
-                continue 
-            # If count is different (e.g. was 2, now 3), we SHOW it.
+                continue
         
-        # Find leads for this value
-        leads_sql = """
-            SELECT DISTINCT t1.parent as name, t2.lead_name, t2.owner
-            FROM `tabApex Contact Detail` t1
-            JOIN `tabLead` t2 ON t1.parent = t2.name
-            WHERE t1.value = %s AND t1.parenttype = 'Lead'
+        filtered_duplicates.append((val, current_count))
+    
+    if not filtered_duplicates:
+        return []
+    
+    # 4. Get all leads for duplicate values in ONE optimized query (using IN clause)
+    # This is much faster than N queries (one per duplicate value)
+    # Limit to first 1000 duplicates to avoid huge IN clause (can be increased if needed)
+    duplicate_values_list = [v[0] for v in filtered_duplicates[:1000]]
+    
+    if not duplicate_values_list:
+        return []
+    
+    # Use parameterized query with IN clause
+    # Split into chunks if too many values (MySQL has limits on IN clause size)
+    chunk_size = 500
+    leads_data = []
+    
+    for i in range(0, len(duplicate_values_list), chunk_size):
+        chunk = duplicate_values_list[i:i + chunk_size]
+        placeholders = ','.join(['%s'] * len(chunk))
+        leads_query = f"""
+            SELECT DISTINCT 
+                acd.value,
+                acd.parent as name,
+                l.lead_name,
+                l.owner
+            FROM `tabApex Contact Detail` acd
+            INNER JOIN `tabLead` l ON acd.parent = l.name
+            WHERE acd.parenttype = 'Lead' 
+            AND acd.value IN ({placeholders})
+            ORDER BY acd.value, acd.parent
         """
-        leads = frappe.db.sql(leads_sql, (val,), as_dict=True)
         
+        chunk_data = frappe.db.sql(leads_query, tuple(chunk), as_dict=True)
+        leads_data.extend(chunk_data)
+    
+    # 5. Group leads by value
+    value_groups = {}
+    value_counts = {v[0]: v[1] for v in filtered_duplicates}
+    
+    for row in leads_data:
+        val = row.value
+        
+        if val not in value_groups:
+            value_groups[val] = []
+        
+        # Add lead if not already added
+        lead_exists = any(l['name'] == row.name for l in value_groups[val])
+        if not lead_exists:
+            value_groups[val].append({
+                "name": row.name,
+                "lead_name": row.lead_name,
+                "owner": row.owner
+            })
+    
+    # 6. Build results
+    results = []
+    for val, count in filtered_duplicates:
+        leads = value_groups.get(val, [])
+        
+        # Only include if we have more than 1 lead
         if len(leads) > 1:
             results.append({
                 "value": val,
-                "count": current_count,
+                "count": count,
                 "leads": leads
             })
-            
+    
     return results
 
 @frappe.whitelist()
@@ -341,6 +562,22 @@ def sync_contacts(doc, method):
 		if e.subject: search_index_parts.append(e.subject)
 		if e.description: search_index_parts.append(frappe.utils.strip_html(e.description))
 
+	# E. [NEW] Include Interaction History (Child Table)
+	if doc.get("interaction_history"):
+		for interaction in doc.interaction_history:
+			if interaction.summary:
+				search_index_parts.append(interaction.summary)
+
+	# F. [NEW] Include Apex Interaction Logs (Linked DocType)
+	# Fetch logs where this lead is the reference
+	interaction_logs = frappe.get_all("Apex Interaction Log", 
+		filters={"reference_doctype": "Lead", "reference_docname": doc.name},
+		fields=["summary"])
+	
+	for log in interaction_logs:
+		if log.summary:
+			search_index_parts.append(log.summary)
+
 	if search_index_parts:
 		# Deduplicate and Join
 		unique_parts = list(dict.fromkeys(search_index_parts))
@@ -361,7 +598,37 @@ def sync_contacts(doc, method):
 	# This ensures all data (multiple numbers, social links) transfers to Customer/Contact
 	sync_to_contact_doctype(doc)
     
-    # 3. Sync to Standard 'Address' Document
+	# 3. Sync to 'smart_contact_summary' for List View
+	try:
+		summary_parts = []
+		icons = {
+			'Mobile': '📱', 'Phone': '☎️', 'WhatsApp': '💬',
+			'Email': '📧', 'Address': '📍', 'Website': '🌐', 
+			'Facebook': 'FB', 'LinkedIn': 'LI', 'Instagram': 'IG'
+		}
+
+		if doc.smart_contact_details:
+			for row in doc.smart_contact_details:
+				val = row.get('value') if isinstance(row, dict) else row.value
+				rtype = row.get('type') if isinstance(row, dict) else row.type
+				
+				if val:
+					icon = icons.get(rtype, '▪️')
+					summary_parts.append(f"{icon} {val}")
+
+		if summary_parts:
+			summary_text = "  |  ".join(summary_parts)
+			# Only update if changed
+			if doc.get('smart_contact_summary') != summary_text:
+				doc.db_set('smart_contact_summary', summary_text)
+		else:
+			if doc.get('smart_contact_summary'):
+				doc.db_set('smart_contact_summary', '')
+				
+	except Exception:
+		pass
+
+	# 4. Sync to Standard 'Address' Document
 	sync_address_doctype(doc)
 
 def sync_to_contact_doctype(lead_doc):
@@ -591,50 +858,178 @@ def facebook_webhook():
 def get_lead_dashboard_data(lead):
     """
     Returns counts for Open Tasks, Open Events, and Notes for a specific Lead.
+    Matches the same logic as Form view dashboard.
     """
     if not lead:
         return {}
 
-    # Open Tasks
+    # Open Tasks: Count ToDo items linked to this Lead via reference_type and reference_name
     open_tasks = frappe.db.count('ToDo', {
         'reference_type': 'Lead',
         'reference_name': lead,
         'status': 'Open'
     })
 
-    # Open Events
-    # Check standard dynamic link 'reference_doctype' & 'reference_docname' (common in Event)
-    # OR 'Event Participants'
-    event_filters = {
-        'status': 'Open',
-        'event_type': ['!=', 'Public'],
-        'name': ['in', [
-            d.parent for d in frappe.get_all('Event Participants', filters={'reference_doctype': 'Lead', 'reference_docname': lead}, fields=['parent'])
-        ]]
-    }
-    open_events = frappe.db.count('Event', filters=event_filters)
+    # Open Events: Count Events where this Lead is a participant
+    # Events are linked via Event Participants child table
+    event_participants = frappe.get_all('Event Participants', 
+        filters={
+            'reference_doctype': 'Lead', 
+            'reference_docname': lead
+        }, 
+        fields=['parent'],
+        distinct=True
+    )
     
-    # Notes: Comprehensive Count
-    # 1. Linked Note Documents (custom_lead)
-    note_docs = frappe.db.count('Note', filters={'custom_lead': lead})
+    if event_participants:
+        event_names = [d.parent for d in event_participants]
+        # Count open events (excluding Public events)
+        open_events = frappe.db.count('Event', filters={
+            'status': 'Open',
+            'event_type': ['!=', 'Public'],
+            'name': ['in', event_names]
+        })
+    else:
+        open_events = 0
     
-    # 2. CRM Note Child Table (parent)
-    crm_notes = frappe.db.count('CRM Note', filters={'parent': lead, 'parentfield': 'notes', 'parenttype': 'Lead'})
-    
-    # 3. Timeline Comments (Communication)
-    timeline_comments = frappe.db.count('Communication', filters={
-        'reference_doctype': 'Lead',
-        'reference_name': lead,
-        'communication_type': 'Comment'
+    # Notes: Count from CRM Note Child Table (same as Form view)
+    # Form view uses this.frm.doc.notes (child table), so we should match that
+    crm_notes = frappe.db.count('CRM Note', filters={
+        'parent': lead, 
+        'parentfield': 'notes', 
+        'parenttype': 'Lead'
     })
     
-    notes = note_docs + crm_notes + timeline_comments
+    # Also count Note documents linked via custom_lead (if used)
+    note_docs = frappe.db.count('Note', filters={'custom_lead': lead})
+    
+    # Total notes (matching Form view behavior - primarily from child table)
+    notes = crm_notes + note_docs
+
+    # Quotations linked to this Lead
+    quotations = frappe.db.count('Quotation', filters={
+        'party_name': lead,
+        'quotation_to': 'Lead'
+    })
+    
+    # Prospects linked to this Lead (through Prospect Lead child table)
+    prospect_leads = frappe.get_all('Prospect Lead', 
+        filters={'lead': lead}, 
+        fields=['parent'])
+    
+    if prospect_leads:
+        prospect_names = [d.parent for d in prospect_leads]
+        prospects = len(set(prospect_names))  # Count unique prospects
+    else:
+        prospects = 0
+    
+    # Opportunities linked to this Lead
+    opportunities = frappe.db.count('Opportunity', filters={
+        'opportunity_from': 'Lead',
+        'party_name': lead
+    })
+
+    # Customers linked to this Lead
+    customers = frappe.db.count('Customer', filters={'lead_name': lead})
+
+    # Last Interaction
+    last_interaction = None
+    if frappe.db.exists("DocType", "Apex Interaction Log"):
+        last_log = frappe.get_all("Apex Interaction Log", 
+            filters={"parent": lead, "parenttype": "Lead"}, 
+            fields=["timestamp", "type", "summary", "creation"], 
+            order_by="timestamp desc", 
+            limit=1
+        )
+        if last_log:
+            last_interaction = last_log[0]
+            
+    # Count Total Interactions
+    interaction_count = 0
+    if frappe.db.exists("DocType", "Apex Interaction Log"):
+         interaction_count = frappe.db.count("Apex Interaction Log", filters={"parent": lead, "parenttype": "Lead"})
+
+            
+    # Fetch Contacts (Child Table)
+    contacts = frappe.db.get_all("Apex Contact Detail", 
+        filters={"parent": lead}, 
+        fields=["type", "value", "is_primary"]
+    )
+    
+    # Prepend Main Lead Contact Info
+    lead_doc = frappe.db.get_value("Lead", lead, ["mobile_no", "email_id"], as_dict=True)
+    if lead_doc:
+        # Add Email if exists
+        if lead_doc.email_id:
+             # Check if already in contacts to avoid dupe
+             if not any(c['value'] == lead_doc.email_id for c in contacts):
+                contacts.insert(0, {
+                    "type": "Email",
+                    "value": lead_doc.email_id,
+                    "is_primary": 0 # Main fields, implicitly primary-ish
+                })
+
+        # Add Mobile if exists
+        if lead_doc.mobile_no:
+             # Check if already in contacts
+             if not any(c['value'] == lead_doc.mobile_no for c in contacts):
+                contacts.insert(0, {
+                    "type": "Mobile",
+                    "value": lead_doc.mobile_no,
+                    "is_primary": 1 # Treat main mobile as primary by default
+                })
 
     return {
         'tasks': open_tasks,
         'events': open_events,
-        'notes': notes
+        'notes': notes,
+        'quotations': quotations,
+        'prospects': prospects,
+        'opportunities': opportunities,
+        'customers': customers,
+        'last_interaction': last_interaction,
+        'interaction_count': interaction_count,
+        'contacts': contacts
     }
+
+@frappe.whitelist()
+def get_leads_dashboard_data_batch(leads):
+    """
+    Returns counts for Open Tasks, Open Events, and Notes for multiple Leads in batch.
+    """
+    import json
+    
+    # Handle case where leads comes as JSON string (Frappe sometimes does this)
+    if isinstance(leads, str):
+        try:
+            leads = json.loads(leads)
+        except:
+            pass
+    
+    if not leads or not isinstance(leads, list):
+        frappe.log_error(f"get_leads_dashboard_data_batch: Invalid leads parameter: {leads} (type: {type(leads)})", "API Error")
+        return {}
+    
+    result = {}
+    
+    for lead in leads:
+        if not lead:
+            continue
+        try:
+            lead_data = get_lead_dashboard_data(lead)
+            result[lead] = lead_data
+        except Exception as e:
+            frappe.log_error(f"Error getting dashboard data for {lead}: {str(e)}", "API Error")
+            result[lead] = {
+                'tasks': 0,
+                'events': 0,
+                'notes': 0,
+                'quotations': 0,
+                'prospects': 0,
+                'opportunities': 0
+            }
+    
+    return result
 
 def process_facebook_payload(payload):
     """
@@ -787,7 +1182,7 @@ def migrate_old_contacts_to_apex():
 	# Check permission: User must have write and export permission on Lead
 	if not (frappe.has_permission("Lead", "write") and frappe.has_permission("Lead", "export")):
 		frappe.throw(__("You don't have permission to migrate contacts. You need both 'Write' and 'Export' permissions on Lead."), frappe.PermissionError)
-	# Get all Leads with old contact data
+	# Get all Leads with old contact data or address data
 	leads = frappe.db.sql("""
 		SELECT 
 			name,
@@ -800,7 +1195,10 @@ def migrate_old_contacts_to_apex():
 			website,
 			custom_mobile_number_1,
 			custom_mobile_number_2,
-			custom_facebook
+			custom_facebook,
+			city,
+			state,
+			country
 		FROM `tabLead`
 		WHERE (
 			(phone IS NOT NULL AND phone != '') OR
@@ -811,7 +1209,10 @@ def migrate_old_contacts_to_apex():
 			(fax IS NOT NULL AND fax != '') OR
 			(custom_mobile_number_1 IS NOT NULL AND custom_mobile_number_1 != '') OR
 			(custom_mobile_number_2 IS NOT NULL AND custom_mobile_number_2 != '') OR
-			(custom_facebook IS NOT NULL AND custom_facebook != '')
+			(custom_facebook IS NOT NULL AND custom_facebook != '') OR
+			(city IS NOT NULL AND city != '') OR
+			(state IS NOT NULL AND state != '') OR
+			(country IS NOT NULL AND country != '')
 		)
 		ORDER BY name
 	""", as_dict=True)
@@ -827,6 +1228,7 @@ def migrate_old_contacts_to_apex():
 	success_count = 0
 	skipped_count = 0
 	contacts_added = 0
+	addresses_added = 0
 	errors = []
 	
 	# Default country code (can be customized)
@@ -925,9 +1327,74 @@ def migrate_old_contacts_to_apex():
 			if add_contact_if_missing('Facebook', lead_data.get('custom_facebook'), '', 0):
 				lead_contacts_added += 1
 			
-			# Save only if we added contacts
+			# Migrate Address: Create Address document from Lead's city, state, country
+			lead_address_added = False
+			if lead_data.get('city') or lead_data.get('state') or lead_data.get('country'):
+				# Check if address already exists for this Lead
+				existing_address = frappe.db.get_all(
+					'Dynamic Link',
+					filters={
+						'link_doctype': 'Lead',
+						'link_name': lead.name,
+						'parenttype': 'Address'
+					},
+					fields=['parent'],
+					limit=1
+				)
+				
+				# Only create address if it doesn't exist and we have address data
+				if not existing_address:
+					try:
+						# Create new Address document
+						address_doc = frappe.new_doc('Address')
+						
+						# Set address title from lead name
+						address_doc.address_title = lead_data.get('lead_name') or lead.name
+						address_doc.address_type = 'Billing'  # Default type
+						
+						# Set address fields from Lead
+						if lead_data.get('city'):
+							address_doc.city = lead_data.get('city')
+							# Use city as address_line1 if no other address line
+							if not address_doc.address_line1:
+								address_doc.address_line1 = lead_data.get('city')
+						
+						if lead_data.get('state'):
+							address_doc.state = lead_data.get('state')
+						
+						if lead_data.get('country'):
+							address_doc.country = lead_data.get('country')
+						else:
+							# Default to Egypt if no country specified
+							address_doc.country = 'Egypt'
+						
+						# Link address to Lead
+						address_doc.append('links', {
+							'link_doctype': 'Lead',
+							'link_name': lead.name
+						})
+						
+						# Set as primary address
+						address_doc.is_primary_address = 1
+						
+						# Save address
+						address_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+						lead_address_added = True
+						addresses_added += 1
+						
+					except Exception as addr_error:
+						# Log address creation error but don't fail the whole migration
+						frappe.log_error(
+							f"Address migration error for Lead {lead.name}: {str(addr_error)}",
+							"Apex CRM Address Migration"
+						)
+			
+			# Save Lead if we added contacts
 			if lead_contacts_added > 0:
 				lead.save(ignore_permissions=True)
+			
+			# Count success if we added contacts or address
+			if lead_contacts_added > 0 or lead_address_added:
 				success_count += 1
 				contacts_added += lead_contacts_added
 			else:
@@ -946,58 +1413,279 @@ def migrate_old_contacts_to_apex():
 		'skipped': skipped_count,
 		'total_leads': len(leads),
 		'contacts_added': contacts_added,
+		'addresses_added': addresses_added,
+		'error_list': errors[:20] if errors else []
+	}
+
+@frappe.whitelist()
+def import_addresses_from_external(file_path=None, addresses_data=None):
+	"""
+	Import addresses from external server (JSON file or direct data)
+	
+	Expected format:
+	[
+		{
+			"Lead ID": "LEAD-XXX",
+			"address_line1": "123 Main St",
+			"address_line2": "Apt 4",
+			"city": "Cairo",
+			"state": "Cairo",
+			"country": "Egypt",
+			"pincode": "12345",
+			"address_type": "Billing"
+		},
+		...
+	]
+	"""
+	# Check permission
+	if not (frappe.has_permission("Lead", "write") and frappe.has_permission("Address", "write")):
+		frappe.throw(__("You don't have permission to import addresses. You need 'Write' permission on Lead and Address."), frappe.PermissionError)
+	
+	import json
+	import os
+	
+	# Get data from file or direct input
+	if file_path:
+		# Handle Frappe File DocType path
+		actual_file_path = file_path
+		if file_path.startswith('/files/') or file_path.startswith('/private/files/'):
+			# Get file from Frappe File DocType
+			try:
+				file_doc = frappe.get_doc("File", {"file_url": file_path})
+				actual_file_path = file_doc.get_full_path()
+			except:
+				# Try to get file by name
+				try:
+					file_doc = frappe.get_doc("File", {"file_name": file_path.split('/')[-1]})
+					actual_file_path = file_doc.get_full_path()
+				except:
+					frappe.throw(f"الملف غير موجود في النظام: {file_path}")
+		
+		if not os.path.exists(actual_file_path):
+			frappe.throw(f"الملف غير موجود: {actual_file_path}")
+		
+		with open(actual_file_path, 'r', encoding='utf-8') as f:
+			addresses_data = json.load(f)
+	
+	if not addresses_data:
+		frappe.throw("لا توجد بيانات للاستيراد")
+	
+	if not isinstance(addresses_data, list):
+		frappe.throw("تنسيق البيانات غير صحيح. يجب أن يكون قائمة من السجلات.")
+	
+	success_count = 0
+	skipped_count = 0
+	errors = []
+	
+	for addr_data in addresses_data:
+		try:
+			lead_id = addr_data.get('Lead ID') or addr_data.get('lead_id') or addr_data.get('lead_name')
+			if not lead_id:
+				skipped_count += 1
+				errors.append("سجل بدون Lead ID - تم تخطيه")
+				continue
+			
+			# Check if Lead exists
+			if not frappe.db.exists('Lead', lead_id):
+				skipped_count += 1
+				errors.append(f"Lead {lead_id} غير موجود - تم تخطيه")
+				continue
+			
+			# Check if address already exists for this Lead
+			existing_address = frappe.db.get_all(
+				'Dynamic Link',
+				filters={
+					'link_doctype': 'Lead',
+					'link_name': lead_id,
+					'parenttype': 'Address'
+				},
+				fields=['parent'],
+				limit=1
+			)
+			
+			# Skip if address already exists (optional - can be changed to update)
+			if existing_address:
+				skipped_count += 1
+				continue
+			
+			# Get Lead to use name for address title
+			lead = frappe.get_doc('Lead', lead_id)
+			
+			# Create new Address document
+			address_doc = frappe.new_doc('Address')
+			
+			# Set address title from lead name
+			address_doc.address_title = lead.lead_name or lead.name
+			address_doc.address_type = addr_data.get('address_type', 'Billing')
+			
+			# Set address fields
+			if addr_data.get('address_line1'):
+				address_doc.address_line1 = addr_data.get('address_line1')
+			elif addr_data.get('city'):
+				# Use city as address_line1 if no address_line1
+				address_doc.address_line1 = addr_data.get('city')
+			
+			if addr_data.get('address_line2'):
+				address_doc.address_line2 = addr_data.get('address_line2')
+			
+			if addr_data.get('city'):
+				address_doc.city = addr_data.get('city')
+			
+			if addr_data.get('state'):
+				address_doc.state = addr_data.get('state')
+			
+			if addr_data.get('country'):
+				address_doc.country = addr_data.get('country')
+			else:
+				# Default to Egypt if no country specified
+				address_doc.country = 'Egypt'
+			
+			if addr_data.get('pincode'):
+				address_doc.pincode = addr_data.get('pincode')
+			
+			if addr_data.get('phone'):
+				address_doc.phone = addr_data.get('phone')
+			
+			if addr_data.get('email_id'):
+				address_doc.email_id = addr_data.get('email_id')
+			
+			# Link address to Lead
+			address_doc.append('links', {
+				'link_doctype': 'Lead',
+				'link_name': lead_id
+			})
+			
+			# Set as primary address if specified
+			if addr_data.get('is_primary', 1):
+				address_doc.is_primary_address = 1
+			
+			# Save address
+			address_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+			success_count += 1
+			
+		except Exception as e:
+			error_msg = f"خطأ في استيراد العنوان لـ Lead {lead_id}: {str(e)}"
+			errors.append(error_msg)
+			frappe.log_error(f"Address import error: {str(e)}", "Apex CRM Address Import")
+			skipped_count += 1
+	
+	frappe.db.commit()
+	
+	return {
+		'success': success_count,
+		'skipped': skipped_count,
+		'total_addresses': len(addresses_data),
 		'error_list': errors[:20] if errors else []
 	}
 
 @frappe.whitelist()
 def export_apex_contacts_to_excel():
 	"""
-	Export all Apex Contact Details to Excel format.
-	Returns file path for download.
+	Export all Apex Contact Details to Excel format using a Pivoted (Flattened) layout.
+	Instead of multiple rows per lead, this creates one row per lead with columns like Mobile 1, Mobile 2, Facebook, etc.
 	"""
-	# Check permission: User must have export permission on Lead (or read as fallback)
+	# Check permission
 	if not (frappe.has_permission("Lead", "export") or frappe.has_permission("Lead", "read")):
-		frappe.throw(__("You don't have permission to export contacts. You need 'Export' or 'Read' permission on Lead."), frappe.PermissionError)
+		frappe.throw(_("You don't have permission to export contacts. You need 'Export' or 'Read' permission on Lead."), frappe.PermissionError)
+	
 	from frappe.utils.xlsxutils import make_xlsx
 	from frappe.utils import get_site_path
 	import os
 	
-	# Get all Apex Contact Details
+	# 1. Fetch all raw data
 	contacts = frappe.db.sql("""
 		SELECT 
 			acd.parent as lead_id,
 			l.lead_name,
 			acd.type,
 			acd.country_code,
-			acd.value,
-			acd.is_primary
+			acd.value
 		FROM `tabApex Contact Detail` acd
 		INNER JOIN `tabLead` l ON acd.parent = l.name
 		WHERE acd.parenttype = 'Lead'
 		ORDER BY acd.parent, acd.idx
 	""", as_dict=True)
 	
-	# Prepare data for Excel
-	data = [['Lead ID', 'Lead Name', 'Type', 'Country Code', 'Value', 'Is Primary']]
+	if not contacts:
+		frappe.throw(_("No contacts found to export."))
+
+	# 2. Process data to group by Lead
+	# Structure: { lead_id: { 'name': 'Lead Name', 'data': { 'Mobile': ['+2010..', '+2011..'], 'Facebook': ['url'] } } }
+	leads_data = {}
+	global_max_counts = {} # { 'Mobile': 3, 'Facebook': 1, 'Email': 2 }
 	
-	for contact in contacts:
-		data.append([
-			contact.get('lead_id', ''),
-			contact.get('lead_name', ''),
-			contact.get('type', ''),
-			contact.get('country_code', ''),
-			contact.get('value', ''),
-			1 if contact.get('is_primary') else 0
-		])
+	for c in contacts:
+		lead_id = c.lead_id
+		if lead_id not in leads_data:
+			leads_data[lead_id] = {
+				'name': c.lead_name,
+				'data': {} # dictionary of lists
+			}
+		
+		ctype = c.type or 'Other'
+		val = c.value or ''
+		
+		# Format value with country code if applicable
+		if c.country_code and ctype in ['Mobile', 'Phone', 'WhatsApp', 'Telegram']:
+			# Avoid double code if already present
+			if not val.startswith('+'):
+				val = f"{c.country_code}{val}"
+		
+		if ctype not in leads_data[lead_id]['data']:
+			leads_data[lead_id]['data'][ctype] = []
+			
+		leads_data[lead_id]['data'][ctype].append(val)
+		
+		# Update global max structure to know how many columns we need
+		current_len = len(leads_data[lead_id]['data'][ctype])
+		if global_max_counts.get(ctype, 0) < current_len:
+			global_max_counts[ctype] = current_len
+
+	# 3. Build Dynamic Columns
+	# Base columns
+	columns = ['Lead ID', 'Lead Name']
 	
-	# Create Excel file
-	xlsx_data = make_xlsx(data, "Apex Contacts Export")
+	# Sort types alphabetically for consistent output, but maybe put common ones first?
+	# Let's enforce a specific order for common types, others alphabetical
+	priority_types = ['Mobile', 'Phone', 'WhatsApp', 'Email', 'Facebook', 'Instagram', 'LinkedIn']
+	all_types = sorted(global_max_counts.keys())
+	sorted_types = [t for t in priority_types if t in all_types] + [t for t in all_types if t not in priority_types]
+	
+	# Create header row: Mobile 1, Mobile 2, Email 1, etc.
+	for ctype in sorted_types:
+		count = global_max_counts[ctype]
+		if count == 1:
+			columns.append(ctype)
+		else:
+			for i in range(count):
+				columns.append(f"{ctype} {i+1}")
+
+	# 4. Populate Rows
+	excel_rows = [columns] # Start with header
+	
+	for lead_id, info in leads_data.items():
+		row = [lead_id, info['name']]
+		
+		for ctype in sorted_types:
+			max_c = global_max_counts[ctype]
+			values = info['data'].get(ctype, [])
+			
+			# Add values for this type
+			for i in range(max_c):
+				if i < len(values):
+					row.append(values[i])
+				else:
+					row.append("") # Empty cell if this lead has fewer items than max
+		
+		excel_rows.append(row)
+	
+	# 5. Generate Excel
+	xlsx_data = make_xlsx(excel_rows, "Apex Contact Smart Export")
 	
 	# Save to site folder
 	site_path = get_site_path()
-	# Format datetime as string for filename
 	timestamp = frappe.utils.now_datetime().strftime('%Y-%m-%d_%H-%M-%S')
-	file_name = f"apex_contacts_export_{timestamp}.xlsx"
+	file_name = f"apex_smart_export_{timestamp}.xlsx"
 	file_path = os.path.join(site_path, 'public', 'files', file_name)
 	
 	# Ensure directory exists
@@ -1012,7 +1700,7 @@ def export_apex_contacts_to_excel():
 	return {
 		'file_url': file_url,
 		'file_path': file_path,
-		'total_records': len(contacts)
+		'total_records': len(leads_data)
 	}
 
 @frappe.whitelist()
@@ -1046,25 +1734,33 @@ def get_apex_crm_button_permissions():
 	)
 	
 
+	# Check permissions from DocPerm
 	for perm in lead_perms:
 		if perm.export:
 			permissions['export_contacts'] = True
 		if perm.get('import', 0):
 			permissions['import_contacts'] = True
+		# Migrate requires Write AND Export
+		if perm.write and perm.export:
+			permissions['migrate_contacts'] = True
 	
-	# Fallback/Supplemental Checks
+	# Fallback/Supplemental Checks using frappe.has_permission (more reliable)
+	if not permissions['export_contacts']:
+		permissions['export_contacts'] = frappe.has_permission("Lead", "export") or frappe.has_permission("Lead", "read")
+	
+	if not permissions['import_contacts']:
+		permissions['import_contacts'] = frappe.has_permission("Lead", "import") or frappe.has_permission("Lead", "write")
+	
 	if not permissions['migrate_contacts']:
 		# Requirement: Write AND Export
 		permissions['migrate_contacts'] = frappe.has_permission("Lead", "write") and frappe.has_permission("Lead", "export")
 	
-	if not permissions['export_contacts']:
-		permissions['export_contacts'] = frappe.has_permission("Lead", "export") or frappe.has_permission("Lead", "read")
-	if not permissions['import_contacts']:
-		permissions['import_contacts'] = frappe.has_permission("Lead", "import") or frappe.has_permission("Lead", "write")
-	
 	# Duplicate Manager: Link to Page Permission ('duplicate-manager')
 	# This allows controlling button visibility via 'Role Permissions Manager' > 'Page'
 	permissions['duplicate_manager'] = has_page_permission('duplicate-manager')
+	
+	# Combine export and import into export_import for the button
+	permissions['export_import'] = permissions['export_contacts'] or permissions['import_contacts']
 	
 	return permissions
 
@@ -1097,7 +1793,7 @@ def import_apex_contacts_from_excel():
 	"""
 	# Check permission: User must have import permission on Lead (or write as fallback)
 	if not (frappe.has_permission("Lead", "import") or frappe.has_permission("Lead", "write")):
-		frappe.throw(__("You don't have permission to import contacts. You need 'Import' or 'Write' permission on Lead."), frappe.PermissionError)
+		frappe.throw(_("You don't have permission to import contacts. You need 'Import' or 'Write' permission on Lead."), frappe.PermissionError)
 	import os
 	from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
 	
@@ -1147,122 +1843,1015 @@ def import_apex_contacts_from_excel():
 		header_row = [str(cell).strip() if cell else '' for cell in rows[0]]
 		header_lower = {str(cell).lower().strip() if cell else '': i for i, cell in enumerate(rows[0])}
 		
-		# Validate required columns
-		required_columns = ['Lead ID', 'Type', 'Value']
-		missing_columns = []
-		column_indices = {}
+		# Detect file format: Old format (Type/Value) or New format (Flattened columns)
+		has_type_value = 'type' in header_lower and 'value' in header_lower
+		has_flattened = any(col.lower() in ['mobile 1', 'phone 1', 'email', 'facebook 1'] for col in header_row)
 		
-		for req_col in required_columns:
-			req_col_lower = req_col.lower()
-			if req_col_lower in header_lower:
-				column_indices[req_col] = header_lower[req_col_lower]
-			else:
-				missing_columns.append(req_col)
+		# Validate required columns based on format
+		if has_type_value:
+			# Old format: Lead ID, Type, Value
+			required_columns = ['Lead ID', 'Type', 'Value']
+			missing_columns = []
+			column_indices = {}
+			
+			for req_col in required_columns:
+				req_col_lower = req_col.lower()
+				if req_col_lower in header_lower:
+					column_indices[req_col] = header_lower[req_col_lower]
+				else:
+					missing_columns.append(req_col)
+			
+			if missing_columns:
+				frappe.throw(f"الأعمدة المطلوبة مفقودة: {', '.join(missing_columns)}. الأعمدة الموجودة: {', '.join(header_row[:10])}...")
+		elif has_flattened:
+			# New format: Lead ID, Lead Name, Mobile 1, Mobile 2, Phone 1, etc.
+			required_columns = ['Lead ID']
+			missing_columns = []
+			column_indices = {}
+			
+			for req_col in required_columns:
+				req_col_lower = req_col.lower()
+				if req_col_lower in header_lower:
+					column_indices[req_col] = header_lower[req_col_lower]
+				else:
+					missing_columns.append(req_col)
+			
+			if missing_columns:
+				frappe.throw(f"الأعمدة المطلوبة مفقودة: {', '.join(missing_columns)}. الأعمدة الموجودة: {', '.join(header_row[:10])}...")
+		else:
+			# Unknown format
+			frappe.throw(f"صيغة الملف غير معروفة. يجب أن يحتوي على إما (Lead ID, Type, Value) أو (Lead ID, Mobile 1, Phone 1, etc.). الأعمدة الموجودة: {', '.join(header_row[:10])}...")
 		
-		if missing_columns:
-			frappe.throw(f"الأعمدة المطلوبة مفقودة: {', '.join(missing_columns)}. الأعمدة الموجودة: {', '.join(header_row)}")
-		
-		# Get optional column indices
-		optional_columns = {
-			'Country Code': header_lower.get('country code'),
-			'Is Primary': header_lower.get('is primary')
-		}
-		
-		# Process data
+		# Process data based on format
 		success_count = 0
 		error_count = 0
 		errors = []
-		leads_processed = {}
 		
-		# Group rows by Lead ID
-		for row_idx, row in enumerate(rows[1:], start=2):  # Skip header
-			if not row or len(row) <= column_indices['Lead ID']:
-				continue
+		if has_type_value:
+			# OLD FORMAT: Process Type/Value format
+			optional_columns = {
+				'Country Code': header_lower.get('country code'),
+				'Is Primary': header_lower.get('is primary')
+			}
 			
-			lead_id = str(row[column_indices['Lead ID']]).strip() if row[column_indices['Lead ID']] else ''
-			if not lead_id:
-				continue
+			leads_processed = {}
 			
-			# Group by Lead ID
-			if lead_id not in leads_processed:
-				leads_processed[lead_id] = []
-			leads_processed[lead_id].append(row)
-		
-		# Process each Lead
-		for lead_id, lead_rows in leads_processed.items():
-			try:
-				# Check if Lead exists
-				if not frappe.db.exists('Lead', lead_id):
-					error_count += 1
-					errors.append(f"Lead {lead_id} غير موجود")
+			# Group rows by Lead ID
+			for row_idx, row in enumerate(rows[1:], start=2):  # Skip header
+				if not row or len(row) <= column_indices['Lead ID']:
 					continue
 				
-				# Get Lead document
-				lead = frappe.get_doc('Lead', lead_id)
+				lead_id = str(row[column_indices['Lead ID']]).strip() if row[column_indices['Lead ID']] else ''
+				if not lead_id:
+					continue
 				
-				# Initialize smart_contact_details if not exists
-				if not lead.smart_contact_details:
-					lead.smart_contact_details = []
-				
-				# Process each contact row for this lead
-				for row in lead_rows:
-					contact_type = str(row[column_indices['Type']]).strip() if len(row) > column_indices['Type'] and row[column_indices['Type']] else 'Other'
-					contact_value = str(row[column_indices['Value']]).strip() if len(row) > column_indices['Value'] and row[column_indices['Value']] else ''
-					
-					if not contact_value:
+				# Group by Lead ID
+				if lead_id not in leads_processed:
+					leads_processed[lead_id] = []
+				leads_processed[lead_id].append(row)
+			
+			# Calculate total leads for progress tracking
+			total_leads = len(leads_processed)
+			
+			# Process each Lead
+			for idx, (lead_id, lead_rows) in enumerate(leads_processed.items(), 1):
+				# Publish progress
+				frappe.publish_progress(
+					float(idx) / total_leads * 100,
+					title=_("استيراد جهات الاتصال"),
+					description=_("معالجة Lead {0} من {1}: {2}").format(idx, total_leads, lead_id)
+				)
+				try:
+					# Check if Lead exists
+					if not frappe.db.exists('Lead', lead_id):
+						error_count += 1
+						errors.append(f"Lead {lead_id} غير موجود")
 						continue
 					
-					# Get optional fields
-					country_code = ''
-					if optional_columns['Country Code'] is not None and len(row) > optional_columns['Country Code']:
-						country_code = str(row[optional_columns['Country Code']]).strip() if row[optional_columns['Country Code']] else ''
+					# Get Lead document
+					lead = frappe.get_doc('Lead', lead_id)
 					
-					is_primary = 0
-					if optional_columns['Is Primary'] is not None and len(row) > optional_columns['Is Primary']:
-						primary_val = row[optional_columns['Is Primary']]
-						is_primary = 1 if (primary_val == 1 or str(primary_val).lower() in ['1', 'true', 'yes']) else 0
+					# Initialize smart_contact_details if not exists
+					if not lead.smart_contact_details:
+						lead.smart_contact_details = []
 					
-					# Check for duplicates
-					existing = False
-					for existing_contact in lead.smart_contact_details:
-						existing_type = existing_contact.get('type') if isinstance(existing_contact, dict) else existing_contact.type
-						existing_value = existing_contact.get('value') if isinstance(existing_contact, dict) else existing_contact.value
+					# Process each contact row for this lead
+					for row in lead_rows:
+						contact_type = str(row[column_indices['Type']]).strip() if len(row) > column_indices['Type'] and row[column_indices['Type']] else 'Other'
+						contact_value = str(row[column_indices['Value']]).strip() if len(row) > column_indices['Value'] and row[column_indices['Value']] else ''
 						
-						if existing_type == contact_type and existing_value == contact_value:
-							existing = True
-							break
+						if not contact_value:
+							continue
+						
+						# Get optional fields
+						country_code = ''
+						if optional_columns['Country Code'] is not None and len(row) > optional_columns['Country Code']:
+							country_code = str(row[optional_columns['Country Code']]).strip() if row[optional_columns['Country Code']] else ''
+						
+						is_primary = 0
+						if optional_columns['Is Primary'] is not None and len(row) > optional_columns['Is Primary']:
+							primary_val = row[optional_columns['Is Primary']]
+							is_primary = 1 if (primary_val == 1 or str(primary_val).lower() in ['1', 'true', 'yes']) else 0
+						
+						# Check for duplicates
+						existing = False
+						for existing_contact in lead.smart_contact_details:
+							existing_type = existing_contact.get('type') if isinstance(existing_contact, dict) else existing_contact.type
+							existing_value = existing_contact.get('value') if isinstance(existing_contact, dict) else existing_contact.value
+							
+							if existing_type == contact_type and existing_value == contact_value:
+								existing = True
+								break
+						
+						if not existing:
+							lead.append('smart_contact_details', {
+								'type': contact_type,
+								'country_code': country_code,
+								'value': contact_value,
+								'is_primary': is_primary
+							})
 					
-					if not existing:
-						lead.append('smart_contact_details', {
-							'type': contact_type,
-							'country_code': country_code,
-							'value': contact_value,
-							'is_primary': is_primary
-						})
-				
-				# Save Lead
-				lead.save(ignore_permissions=True)
-				success_count += 1
-				
-			except Exception as e:
-				error_count += 1
-				error_msg = f"خطأ في Lead {lead_id}: {str(e)}"
-				errors.append(error_msg)
-				frappe.log_error(f"Import error for {lead_id}: {str(e)}")
+					# Save Lead
+					lead.save(ignore_permissions=True)
+					success_count += 1
+					
+				except Exception as e:
+					error_count += 1
+					# More detailed error message
+					error_type = type(e).__name__
+					error_details = str(e)
+					
+					# Categorize errors
+					if "does not exist" in error_details.lower() or "not found" in error_details.lower():
+						error_msg = f"Lead {lead_id}: غير موجود في النظام"
+					elif "permission" in error_details.lower() or "access" in error_details.lower():
+						error_msg = f"Lead {lead_id}: لا توجد صلاحية للوصول"
+					elif "duplicate" in error_details.lower():
+						error_msg = f"Lead {lead_id}: بيانات مكررة"
+					else:
+						error_msg = f"Lead {lead_id}: {error_details[:80]}"
+					
+					errors.append(error_msg)
+					frappe.log_error(f"Import error for Lead {lead_id}: {error_type} - {error_details[:200]}", "Apex CRM Import")
+		
+		else:
+			# NEW FORMAT: Process Flattened columns (Mobile 1, Mobile 2, Phone 1, etc.)
+			# Map column names to contact types
+			type_mapping = {
+				'mobile': 'Mobile',
+				'phone': 'Phone',
+				'whatsapp': 'WhatsApp',
+				'email': 'Email',
+				'facebook': 'Facebook',
+				'instagram': 'Instagram',
+				'telegram': 'Telegram',
+				'tiktok': 'TikTok',
+				'address': 'Address',
+				'website': 'Website',
+				'linkedin': 'LinkedIn'
+			}
+			
+			# Calculate total rows (excluding header) for progress tracking
+			total_rows = len([r for r in rows[1:] if r and len(r) > column_indices['Lead ID'] and str(r[column_indices['Lead ID']]).strip()])
+			
+			# Process each row (one row per Lead)
+			processed_rows = 0
+			for row_idx, row in enumerate(rows[1:], start=2):  # Skip header
+				try:
+					if not row or len(row) <= column_indices['Lead ID']:
+						continue
+					
+					lead_id = str(row[column_indices['Lead ID']]).strip() if row[column_indices['Lead ID']] else ''
+					if not lead_id:
+						continue
+					
+					processed_rows += 1
+					
+					# Publish progress
+					frappe.publish_progress(
+						float(processed_rows) / total_rows * 100,
+						title=_("استيراد جهات الاتصال"),
+						description=_("معالجة Lead {0} من {1}: {2}").format(processed_rows, total_rows, lead_id)
+					)
+					
+					# Check if Lead exists
+					if not frappe.db.exists('Lead', lead_id):
+						error_count += 1
+						errors.append(f"Lead {lead_id} غير موجود")
+						continue
+					
+					# Get Lead document
+					lead = frappe.get_doc('Lead', lead_id)
+					
+					# Initialize smart_contact_details if not exists
+					if not lead.smart_contact_details:
+						lead.smart_contact_details = []
+					
+					# Track contacts added for this lead
+					contacts_added_count = 0
+					contacts_before = len(lead.smart_contact_details)
+					
+					# Process each column in the row
+					for col_idx, col_name in enumerate(header_row):
+						if col_idx >= len(row):
+							continue
+						
+						col_value = str(row[col_idx]).strip() if row[col_idx] else ''
+						if not col_value or col_idx == column_indices['Lead ID']:
+							continue
+						
+						# Skip Lead Name column
+						if 'lead name' in col_name.lower():
+							continue
+						
+						# Determine contact type from column name
+						contact_type = 'Other'
+						col_lower = col_name.lower()
+						
+						# Check for numbered columns (Mobile 1, Mobile 2, etc.)
+						for key, mapped_type in type_mapping.items():
+							if key in col_lower:
+								contact_type = mapped_type
+								break
+						
+						# Check for duplicates
+						existing = False
+						for existing_contact in lead.smart_contact_details:
+							existing_type = existing_contact.get('type') if isinstance(existing_contact, dict) else existing_contact.type
+							existing_value = existing_contact.get('value') if isinstance(existing_contact, dict) else existing_contact.value
+							
+							# Normalize comparison (remove spaces, special chars for phones)
+							if contact_type in ['Mobile', 'Phone', 'WhatsApp', 'Telegram']:
+								normalized_existing = ''.join(filter(str.isdigit, str(existing_value or '')))
+								normalized_new = ''.join(filter(str.isdigit, str(col_value or '')))
+								if existing_type == contact_type and normalized_existing == normalized_new and normalized_new:
+									existing = True
+									break
+							else:
+								if existing_type == contact_type and str(existing_value or '').strip().lower() == str(col_value or '').strip().lower():
+									existing = True
+									break
+						
+						if not existing:
+							# Default country code for phone numbers
+							country_code = '+20' if contact_type in ['Mobile', 'Phone', 'WhatsApp', 'Telegram'] else ''
+							
+							lead.append('smart_contact_details', {
+								'type': contact_type,
+								'country_code': country_code,
+								'value': col_value,
+								'is_primary': 0
+							})
+							contacts_added_count += 1
+					
+					# Only save if contacts were added
+					if contacts_added_count > 0:
+						lead.save(ignore_permissions=True)
+						frappe.db.commit()  # Commit immediately to ensure data is saved
+						contacts_after = len(lead.smart_contact_details)
+						success_count += 1
+						
+						# Log success for debugging
+						frappe.log_error(
+							f"Import success for Lead {lead_id}: Added {contacts_added_count} contacts (Total: {contacts_before} -> {contacts_after})",
+							"Apex CRM Import Success"
+						)
+					else:
+						# No new contacts added (all duplicates)
+						success_count += 1  # Still count as success (no errors)
+					
+				except Exception as e:
+					error_count += 1
+					# More detailed error message
+					error_type = type(e).__name__
+					error_details = str(e)
+					
+					# Categorize errors
+					if "does not exist" in error_details.lower() or "not found" in error_details.lower():
+						error_msg = f"Lead {lead_id}: غير موجود في النظام"
+					elif "permission" in error_details.lower() or "access" in error_details.lower():
+						error_msg = f"Lead {lead_id}: لا توجد صلاحية للوصول"
+					elif "duplicate" in error_details.lower():
+						error_msg = f"Lead {lead_id}: بيانات مكررة"
+					else:
+						error_msg = f"Lead {lead_id}: {error_details[:80]}"
+					
+					errors.append(error_msg)
+					frappe.log_error(f"Import error for Lead {lead_id}: {error_type} - {error_details[:200]}", "Apex CRM Import")
 		
 		frappe.db.commit()
+		
+		# Calculate total leads processed
+		total_leads = success_count + error_count
+		
+		# Final progress update (will be closed by client-side code)
+		frappe.publish_progress(100, title=_("اكتمل الاستيراد"), description=_("تم معالجة {0} من {1} Lead بنجاح").format(success_count, total_leads))
+		
+		# Group errors by type for better reporting
+		error_summary = {}
+		for err in errors:
+			# Extract error type from message
+			if "غير موجود" in err:
+				error_type = "Lead غير موجود"
+			elif "صلاحية" in err:
+				error_type = "مشاكل صلاحيات"
+			elif "مكررة" in err:
+				error_type = "بيانات مكررة"
+			else:
+				error_type = "أخطاء أخرى"
+			
+			error_summary[error_type] = error_summary.get(error_type, 0) + 1
 		
 		return {
 			'success': success_count,
 			'errors': error_count,
-			'total_leads': len(leads_processed),
-			'error_list': errors[:20]  # First 20 errors
+			'total_leads': total_leads,
+			'error_list': errors[:50],  # First 50 errors (increased from 20)
+			'error_summary': error_summary,  # Summary by error type
+			'message': _("تم استيراد {0} من {1} Lead بنجاح. {2} أخطاء.").format(success_count, total_leads, error_count)
 		}
 		
 	except Exception as e:
-		frappe.log_error(f"Excel import failed: {str(e)}", "Apex CRM Import Error")
-		frappe.throw(f"فشل استيراد الملف: {str(e)}")
+		# Truncate error message to avoid CharacterLengthExceededError
+		error_msg = str(e)
+		if len(error_msg) > 200:
+			error_msg = error_msg[:200] + "..."
+		
+		frappe.log_error(f"Excel import failed: {error_msg}", "Apex CRM Import Error")
+		
+		# Show user-friendly error message
+		if "الأعمدة المطلوبة مفقودة" in error_msg:
+			frappe.throw(error_msg)
+		else:
+			frappe.throw(f"فشل استيراد الملف: {error_msg[:100]}")
 
 
+@frappe.whitelist()
+def update_territory_option():
+	"""Update Apex Contact Detail DocType to include Territory in type options and fix existing records"""
+	try:
+		# Get the DocType
+		dt = frappe.get_doc('DocType', 'Apex Contact Detail')
+		
+		# Find the 'type' field
+		type_field = None
+		for field in dt.fields:
+			if field.fieldname == 'type':
+				type_field = field
+				break
+		
+		if type_field:
+			# Get current options
+			options = type_field.options.split('\n')
+			
+			# Remove 'Territory' and 'Territory-1' if they exist
+			if 'Territory' in options:
+				options.remove('Territory')
+			if 'Territory-1' in options:
+				options.remove('Territory-1')
+			
+			# Update the field
+			type_field.options = '\n'.join(options)
+			
+			# Save the DocType
+			dt.save()
+			frappe.db.commit()
+			
+			# Fix existing records with 'Territory' or 'Territory-1' - convert them to 'Other'
+			updated_count = frappe.db.sql("""
+				UPDATE `tabApex Contact Detail`
+				SET type = 'Other'
+				WHERE type IN ('Territory', 'Territory-1')
+			""")
+			frappe.db.commit()
+			
+			return {
+				'success': True,
+				'message': 'Successfully removed Territory from Apex Contact Detail DocType',
+				'options': type_field.options.split('\n'),
+				'records_updated': updated_count
+			}
+		else:
+			return {
+				'success': False,
+				'message': 'Type field not found'
+			}
+			
+	except Exception as e:
+		frappe.log_error(f"Error updating Territory option: {str(e)}", "Update Territory Option")
+		return {
+			'success': False,
+			'message': str(e)
+		}
+
+
+
+
+@frappe.whitelist()
+def get_lead_notes(lead):
+	"""
+	Returns a list of notes (both CRM Note child table and standard Note docs) for a lead.
+	"""
+	all_notes = []
+	
+	# 1. Fetch CRM Notes (Child Table)
+	crm_notes = frappe.db.sql("""
+		SELECT note, creation, 'CRM Note' as type, owner 
+		FROM `tabCRM Note` 
+		WHERE parent = %s AND parenttype = 'Lead'
+		ORDER BY creation DESC
+	""", (lead,), as_dict=True)
+	
+	for n in crm_notes:
+		all_notes.append({
+			"content": n.note,
+			"date": n.creation,
+			"type": "Quick Note",
+			"owner": n.owner
+		})
+		
+	# 2. Fetch Standard Notes
+	std_notes = frappe.db.sql("""
+		SELECT title, content, creation, owner 
+		FROM `tabNote` 
+		WHERE custom_lead = %s
+		ORDER BY creation DESC
+	""", (lead,), as_dict=True)
+	
+	for n in std_notes:
+		# Use title if content is empty, or combine
+		content = n.content
+		if n.title and n.title not in content:
+			content = f"<b>{n.title}</b><br>{content}"
+			
+		all_notes.append({
+			"content": content,
+			"date": n.creation,
+			"type": "Note",
+			"owner": n.owner
+		})
+		
+	# Sort combined list by date desc
+	all_notes.sort(key=lambda x: x['date'], reverse=True)
+	
+	return all_notes
+
+@frappe.whitelist()
+def add_lead_note(lead, notes):
+	"""
+	Adds a note to the Lead's CRM Note child table.
+	"""
+	if not notes:
+		frappe.throw("Note content is required")
+		
+	doc = frappe.get_doc("Lead", lead)
+	
+	# Find the fieldname for 'CRM Note' child table
+	table_field = None
+	# Usually 'notes' for Lead if defined in doctype, checking meta
+	# Optimization: We know it's "CRM Note" child table. 
+	# To add safely via SQL we need the newly created name
+	
+	import frappe.utils
+	
+	# Generate ID
+	name = frappe.generate_hash(length=10)
+	parent = lead
+	parenttype = "Lead"
+	parentfield = "notes" # Verified common default, but we can double check
+	
+	# Try to find correct parentfield from meta if possible, otherwise default to notes
+	meta = frappe.get_meta("Lead")
+	for field in meta.fields:
+		if field.fieldtype == "Table" and field.options == "CRM Note":
+			parentfield = field.fieldname
+			break
+			
+	# Raw SQL Insert to bypass ALL hooks
+	query = """
+		INSERT INTO `tabCRM Note` 
+		(name, creation, modified, modified_by, owner, docstatus, parent, parenttype, parentfield, note, added_by, added_on)
+		VALUES (%s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s)
+	"""
+	
+	params = (
+		name, 
+		frappe.utils.now(), 
+		frappe.utils.now(), 
+		frappe.session.user, 
+		frappe.session.user,
+		parent,
+		parenttype,
+		parentfield,
+		notes,
+		frappe.session.user,
+		frappe.utils.now()
+	)
+	
+	frappe.db.sql(query, params)
+	frappe.db.commit()
+	
+	return "Success"
+
+@frappe.whitelist()
+def update_lead_status(lead, status):
+	"""
+	Updates Lead status safely using raw SQL to COMPLETELY bypass hooks.
+	"""
+	if not lead or not status:
+		frappe.throw(_("Missing lead or status"))
+	
+	# Raw SQL update to bypass on_update hooks that trigger assignment rules
+	frappe.db.sql("UPDATE `tabLead` SET status=%s, modified=%s WHERE name=%s", (status, frappe.utils.now(), lead))
+	frappe.db.commit()
+	
+	return "Success"
+
+
+@frappe.whitelist()
+def quick_add_contact(lead, type, value):
+	"""
+	Adds a new contact to the Lead's smart_contact_details.
+	"""
+	if not lead or not type or not value:
+		frappe.throw(_("Missing arguments"))
+
+	import frappe.utils
+	
+	# Generate ID
+	name = frappe.generate_hash(length=10)
+	
+	# Default parentfield
+	parentfield = "smart_contact_details" 
+	
+	# Verify parentfield via Meta
+	meta = frappe.get_meta("Lead")
+	for field in meta.fields:
+		if field.fieldtype == "Table" and field.options == "Apex Contact Detail":
+			parentfield = field.fieldname
+			break
+			
+	# Raw SQL Insert to bypass ALL hooks
+	query = """
+		INSERT INTO `tabApex Contact Detail` 
+		(name, creation, modified, modified_by, owner, docstatus, parent, parenttype, parentfield, type, value, is_primary)
+		VALUES (%s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, 0)
+	"""
+	
+	params = (
+		name, 
+		frappe.utils.now(), 
+		frappe.utils.now(), 
+		frappe.session.user, 
+		frappe.session.user,
+		lead,
+		"Lead",
+		parentfield,
+		type,
+		value
+	)
+	
+	frappe.db.sql(query, params)
+	frappe.db.commit() # Ensure it's committed
+	
+	return {"status": "success", "message": "Contact added"}
+	
+	# Create new contact row
+	row = {
+		"type": type,
+		"value": value
+	}
+	
+	# Add to smart_contact_details
+	if not doc.smart_contact_details:
+		doc.smart_contact_details = []
+	
+	doc.append("smart_contact_details", row)
+	doc.save()
+	
+	return doc.smart_contact_details
+
+@frappe.whitelist()
+def get_linked_prospects(lead):
+    """
+    Fetch Prospects linked to a Lead via the Prospect Lead child table.
+    """
+    if not lead: return []
+    
+    # Check permissions (optional but good)
+    # if not frappe.has_permission("Prospect", "read"): return []
+
+    # Find Parents (Prospects) where this lead is listed in child table
+    # Child table: 'Prospect Lead', Field: 'lead'
+    
+    # 1. Get List of Prospect Names
+    child_rows = frappe.get_all('Prospect Lead', filters={'lead': lead}, fields=['parent'])
+    if not child_rows: return []
+    
+    parents = [d.parent for d in child_rows]
+    parents = list(set(parents)) # dedup
+    
+    linked_prospects = frappe.get_all('Prospect', 
+        filters={'name': ['in', parents]},
+        fields=['name', 'company_name', 'status', 'title']
+    )
+    return linked_prospects
+
+@frappe.whitelist()
+def get_lead_notes(lead):
+    """
+    Fetch Notes linked to a Lead (party_name = lead).
+    """
+    if not lead: return []
+    return frappe.get_list('Note',
+        filters={'party_name': lead},
+        fields=['title', 'content', 'owner', 'modified'],
+        order_by='modified desc'
+    )
+
+
+@frappe.whitelist()
+def get_lead_notes(lead):
+    # Fetch Notes linked to a Lead. 
+    # Combines 'CRM Note' child table and 'Note' DocType (custom_lead).
+    
+    if not lead: return []
+    
+    # 1. Fetch CRM Note Child Table (embedded in Lead)
+    # These are stored in 'tabCRM Note'
+    crm_notes = frappe.db.get_all('CRM Note', 
+        filters={
+            'parent': lead,
+            'parenttype': 'Lead',
+            'parentfield': 'notes'
+        },
+        fields=['note as content', 'added_by as owner', 'creation as modified'],
+        order_by='creation desc'
+    )
+    for n in crm_notes:
+        n['title'] = "Lead Note" # Child table notes don't have titles usually
+        
+    # 2. Fetch linked 'Note' docs (if using custom_lead)
+    # Check if custom_lead field exists to avoid error
+    linked_notes = []
+    if frappe.db.has_column('Note', 'custom_lead'):
+        linked_notes = frappe.get_list('Note',
+            filters={'custom_lead': lead},
+            fields=['title', 'content', 'owner', 'modified'],
+            order_by='modified desc'
+        )
+    
+    # Combine and Sort
+    all_notes = crm_notes + linked_notes
+    # Sort by modified/creation desc
+    all_notes.sort(key=lambda x: x.get('modified'), reverse=True)
+    
+    return all_notes
+
+@frappe.whitelist()
+def add_lead_note(lead, content):
+    # Adds a note to the Lead's 'CRM Note' child table.
+    
+    if not lead or not content: return
+    
+    try:
+        # Create Child Doc directly to bypass Parent Validation
+        note = frappe.new_doc('CRM Note')
+        note.note = content
+        note.added_by = frappe.session.user
+        note.parent = lead
+        note.parenttype = 'Lead'
+        note.parentfield = 'notes'
+        
+        # Flags to bypass standard checks if any
+        note.flags.ignore_permissions = True
+        note.flags.ignore_validate_update_after_submit = True 
+        
+        note.insert(ignore_permissions=True)
+        
+        # Explicit Commit to ensure persistence
+        frappe.db.commit()
+        
+        return note.name
+    except Exception as e:
+        frappe.log_error(f"Failed to add note to {lead}: {str(e)}")
+        raise e
+
+
+
+@frappe.whitelist()
+def get_lead_notes(lead):
+    # Fetch Notes linked to a Lead. 
+    # Uses 'added_on' for CRM Note child table.
+    
+    if not lead: return []
+    
+    # 1. Fetch CRM Note Child Table
+    crm_notes = frappe.db.get_all('CRM Note', 
+        filters={
+            'parent': lead,
+            'parenttype': 'Lead',
+            'parentfield': 'notes'
+        },
+        fields=['note as content', 'added_by as owner', 'added_on', 'creation'],
+        order_by='added_on desc'
+    )
+    for n in crm_notes:
+        n['title'] = "Lead Note"
+        # Use added_on if available, else creation
+        n['modified'] = n.get('added_on') or n.get('creation')
+        
+    # 2. Fetch linked 'Note' docs (Legacy/Custom Lead link)
+    linked_notes = []
+    if frappe.db.has_column('Note', 'custom_lead'):
+        linked_notes = frappe.get_list('Note',
+            filters={'custom_lead': lead},
+            fields=['title', 'content', 'owner', 'modified'],
+            order_by='modified desc'
+        )
+    
+    # Combine and Sort
+    all_notes = crm_notes + linked_notes
+    all_notes.sort(key=lambda x: x.get('modified') or "", reverse=True)
+    
+    return all_notes
+
+@frappe.whitelist()
+def add_lead_note(lead, content):
+    if not lead or not content: return
+    
+    try:
+        note = frappe.new_doc('CRM Note')
+        note.note = content
+        note.added_by = frappe.session.user
+        note.parent = lead
+        note.parenttype = 'Lead'
+        note.parentfield = 'notes'
+        
+        # Explicitly set Date
+        from frappe.utils import now
+        note.added_on = now()
+        
+        note.flags.ignore_permissions = True
+        note.flags.ignore_validate_update_after_submit = True 
+        
+        note.insert(ignore_permissions=True)
+        frappe.db.commit()
+        
+        return note.name
+    except Exception as e:
+        frappe.log_error(f"Failed to add note to {lead}: {str(e)}")
+        raise e
+
+@frappe.whitelist()
+def get_linked_prospects(lead):
+    # Fetch Prospects linked to a Lead via the Prospect Lead child table.
+    
+    if not lead: return []
+    
+    # 1. Get List of Prospect Names
+    try:
+        child_rows = frappe.get_all('Prospect Lead', filters={'lead': lead}, fields=['parent'])
+        if not child_rows: return []
+        
+        parents = [d.parent for d in child_rows]
+        parents = list(set(parents)) # dedup
+        
+        # 'status' field does NOT exist on Prospect. Removed.
+        linked_prospects = frappe.get_all('Prospect', 
+            filters={'name': ['in', parents]},
+            fields=['name', 'company_name', 'customer_group', 'no_of_employees', 'industry']
+        )
+        return linked_prospects
+    except Exception as e:
+        frappe.log_error(f"Error fetching prospects for {lead}: {str(e)}")
+        return []
+
+
+# ==========================================
+# Phase 4: Expanded Dashboard API Methods
+# ==========================================
+
+@frappe.whitelist()
+def get_linked_tasks(lead):
+    if not lead: return []
+    return frappe.get_list('ToDo',
+        filters={
+            'reference_type': 'Lead',
+            'reference_name': lead,
+            'status': 'Open'
+        },
+        fields=['name', 'description', 'date', 'status', 'owner'],
+        order_by='date desc'
+    )
+
+@frappe.whitelist()
+def add_lead_task(lead, description, date):
+    if not lead or not description: return
+    try:
+        task = frappe.new_doc('ToDo')
+        task.reference_type = 'Lead'
+        task.reference_name = lead
+        task.description = description
+        task.date = date or frappe.utils.nowdate()
+        task.status = 'Open'
+        task.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return task.name
+    except Exception as e:
+        frappe.log_error(f"Error adding task for {lead}: {str(e)}")
+        raise e
+
+@frappe.whitelist()
+def get_linked_events(lead):
+    if not lead: return []
+    # Events logic matches dashboard: Participant via Event Participants or reference
+    # Simplified: Get events where reference_docname is lead
+    # NOTE: Standard Event uses 'Event Participants' usually.
+    # Let's check 'Event Participants'
+    participants = frappe.get_all('Event Participants', filters={'reference_docname': lead}, fields=['parent'])
+    p_names = [d.parent for d in participants]
+    
+    events = frappe.get_list('Event',
+        filters={
+            'name': ['in', p_names],
+            'status': 'Open'
+        },
+        fields=['name', 'subject', 'starts_on', 'ends_on', 'event_type'],
+        order_by='starts_on desc'
+    )
+    return events
+
+@frappe.whitelist()
+def add_lead_event(lead, subject, starts_on):
+    if not lead or not subject: return
+    try:
+        event = frappe.new_doc('Event')
+        event.subject = subject
+        event.starts_on = starts_on or frappe.utils.now_datetime()
+        event.event_type = 'Private' # Default to private or call?
+        event.status = 'Open'
+        # Add participant
+        event.append('event_participants', {
+            'reference_doctype': 'Lead',
+            'reference_docname': lead
+        })
+        event.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return event.name
+    except Exception as e:
+        frappe.log_error(f"Error adding event for {lead}: {str(e)}")
+        raise e
+
+@frappe.whitelist()
+def get_linked_quotations(lead):
+    if not lead: return []
+    return frappe.get_list('Quotation',
+        filters={'party_name': lead, 'quotation_to': 'Lead', 'docstatus': ['<', 2]},
+        fields=['name', 'grand_total', 'status', 'transaction_date', 'currency'],
+        order_by='transaction_date desc'
+    )
+
+@frappe.whitelist()
+def get_linked_opportunities(lead):
+    if not lead: return []
+    return frappe.get_list('Opportunity',
+        filters={'party_name': lead, 'opportunity_from': 'Lead', 'status': 'Open'}, # Or all?
+        fields=['name', 'opportunity_amount', 'status', 'transaction_date', 'currency'],
+        order_by='transaction_date desc'
+    )
+
+@frappe.whitelist()
+def get_linked_customers(lead):
+    if not lead: return []
+    return frappe.get_list('Customer',
+        filters={'lead_name': lead},
+        fields=['name', 'customer_name', 'customer_group'],
+        order_by='creation desc'
+    )
+
+
+@frappe.whitelist()
+def get_lead_interaction_history(lead):
+    # Fetch logs where parent = lead
+    return frappe.get_all('Apex Interaction Log', 
+        filters={'parent': lead}, 
+        fields=['type', 'status', 'summary', 'timestamp', 'user', 'voice_note'],
+        order_by='timestamp desc'
+    )
+
+@frappe.whitelist()
+def log_interaction(lead, type, status, summary=None, duration=None, voice_note=None):
+    """
+    Safely adds an interaction log to a lead by inserting child doc directly.
+    Bypasses Parent.save() to avoid Assignment Rule / Workflow errors on submitted docs.
+    """
+    if not frappe.db.exists("Lead", lead):
+        frappe.throw("Lead not found")
+        
+    # Insert Child Doc Directly
+    log = frappe.get_doc({
+        "doctype": "Apex Interaction Log",
+        "parent": lead,
+        "parenttype": "Lead",
+        "parentfield": "interaction_history",
+        "type": type,
+        "status": status,
+        "summary": summary,
+        "duration": duration,
+        "voice_note": voice_note,
+        "user": frappe.session.user,
+        "timestamp": frappe.utils.now_datetime()
+    })
+    
+    log.insert(ignore_permissions=True)
+    return log.name
+
+@frappe.whitelist()
+def update_lead_status(lead, status):
+    """
+    Updates Lead status directly, bypassing UpdateAfterSubmit checks if necessary.
+    Uses frappe.db.set_value to avoid triggering full save validations that block strict changes.
+    """
+    if not frappe.db.exists("Lead", lead):
+        frappe.throw("Lead not found")
+        
+    # check permission (optional, but good practice)
+    # if not frappe.has_permission("Lead", "write"):
+    #     frappe.throw("Not permitted")
+
+    # Direct DB update to bypass 'UpdateAfterSubmitError'
+    frappe.db.set_value("Lead", lead, "status", status)
+    
+    # Add a comment so we know it happened
+    frappe.get_doc("Lead", lead).add_comment("Info", f"Status changed to {status} via Mobile Card")
+    
+    return "ok"
+
+@frappe.whitelist()
+def get_lead_contact_details(lead):
+	if not frappe.has_permission("Lead", "read"):
+		frappe.throw("No permission to view Lead")
+		
+	doc = frappe.get_doc("Lead", lead)
+	details = []
+	
+	# 1. Standard Fields (Unique check)
+	seen_values = set()
+	
+	def add_detail(dtype, value, icon):
+		if value and value not in seen_values:
+			details.append({"type": dtype, "value": value, "icon": icon, "source": "Main"})
+			seen_values.add(value)
+	
+	add_detail("Email", doc.email_id, "envelope")
+	add_detail("Mobile", doc.mobile_no, "mobile")
+	add_detail("Phone", doc.phone, "phone")
+	add_detail("WhatsApp", doc.whatsapp_no, "whatsapp")
+	add_detail("Website", doc.website, "globe")
+	add_detail("Fax", doc.fax, "fax")
+	
+	# Address (Composite)
+	if doc.city or doc.country:
+		addr = ", ".join(filter(None, [doc.city, doc.state, doc.country]))
+		add_detail("Address", addr, "map-marker")
+
+	# 2. Child Table (Apex Contact Details)
+	if doc.get("apex_contact_details"):
+		for row in doc.apex_contact_details:
+			# Map Type to Icon
+			icon = "circle"
+			t = (row.type or "").lower()
+			
+			if "facebook" in t: icon = "facebook"
+			elif "whatsapp" in t: icon = "whatsapp"
+			elif "linkedin" in t: icon = "linkedin"
+			elif "instagram" in t: icon = "instagram"
+			elif "twitter" in t: icon = "twitter"
+			elif "tiktok" in t: icon = "play"
+			elif "snapchat" in t: icon = "snapchat"
+			elif "telegram" in t: icon = "telegram"
+			elif "email" in t: icon = "envelope"
+			elif "phone" in t: icon = "phone"
+			elif "mobile" in t: icon = "mobile"
+			elif "website" in t: icon = "globe"
+			elif "address" in t or "location" in t: icon = "map-marker"
+			
+			val = row.value
+			# Add country code if phone-like and not present
+			if row.country_code and val and row.type in ['Mobile', 'Phone', 'WhatsApp'] and not val.startswith('+'):
+				val = f"{row.country_code}{val}"
+			
+			if val and val not in seen_values:
+				details.append({
+					"type": row.type,
+					"value": val,
+					"icon": icon,
+					"source": "Child Table",
+					"is_primary": row.is_primary
+				})
+				seen_values.add(val)
+				
+	return details
 
 

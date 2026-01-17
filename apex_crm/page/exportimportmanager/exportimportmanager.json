@@ -1,0 +1,20 @@
+{
+    "creation": "2025-12-31 04:18:00",
+    "docstatus": 0,
+    "doctype": "Page",
+    "idx": 0,
+    "modified": "2025-12-31 04:18:00",
+    "modified_by": "Administrator",
+    "module": "Apex CRM",
+    "name": "exportimportmanager",
+    "owner": "Administrator",
+    "page_name": "exportimportmanager",
+    "roles": [
+        {
+            "role": "System Manager"
+        }
+    ],
+    "standard": "No",
+    "system_page": 0,
+    "title": "Export/Import Manager"
+}

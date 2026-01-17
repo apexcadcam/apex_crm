@@ -9,7 +9,8 @@
         "user",
         "status",
         "duration",
-        "summary"
+        "summary",
+        "voice_note"
     ],
     "fields": [
         {
@@ -47,6 +48,11 @@
             "fieldname": "summary",
             "fieldtype": "Small Text",
             "label": "Summary"
+        },
+        {
+            "fieldname": "voice_note",
+            "fieldtype": "Attach",
+            "label": "Voice Note"
         }
     ],
     "index_web_pages_for_search": 1,

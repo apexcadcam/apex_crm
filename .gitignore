@@ -1,7 +1,64 @@
-.DS_Store
+# Python
 *.pyc
-*.egg-info
+__pycache__/
+*.egg-info/
+*.egg
+*.so
+.Python
+
+# Frappe/ERPNext
 *.swp
+*.swo
+*~
 tags
-node_modules
-__pycache__
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+*.xlsx
+*.xls
+*.backup*
+*.test
+*.bak
+*.tmp
+
+# Development/Debug scripts
+debug_*.py
+check_*.py
+fix_*.py
+*_test.py
+test_*.py
+
+# Documentation (temporary)
+CURRENT_STATE_ANALYSIS.md
+EXPORT_CHECKLIST.md
+EXPORT_README.md
+INSTALLATION_GUIDE.md
+UNINSTALL_CHECKLIST.md
+Fixing*.md
+Installing*.md
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Build
+dist/
+build/
+*.tar.gz

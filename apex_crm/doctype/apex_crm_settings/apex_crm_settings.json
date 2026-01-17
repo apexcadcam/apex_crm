@@ -1,0 +1,79 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "field:name",
+    "creation": "2025-12-31 03:28:00",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "duplicate_manager_section",
+        "duplicate_manager_roles",
+        "export_import_section",
+        "export_import_roles",
+        "migration_section",
+        "migration_roles"
+    ],
+    "fields": [
+        {
+            "fieldname": "duplicate_manager_section",
+            "fieldtype": "Section Break",
+            "label": "Duplicate Manager Permissions"
+        },
+        {
+            "fieldname": "duplicate_manager_roles",
+            "fieldtype": "Table",
+            "label": "Allowed Roles",
+            "options": "Apex CRM Role",
+            "description": "Roles that can access Duplicate Manager"
+        },
+        {
+            "fieldname": "export_import_section",
+            "fieldtype": "Section Break",
+            "label": "Export/Import Permissions"
+        },
+        {
+            "fieldname": "export_import_roles",
+            "fieldtype": "Table",
+            "label": "Allowed Roles",
+            "options": "Apex CRM Role",
+            "description": "Roles that can export and import contacts"
+        },
+        {
+            "fieldname": "migration_section",
+            "fieldtype": "Section Break",
+            "label": "Migration Permissions"
+        },
+        {
+            "fieldname": "migration_roles",
+            "fieldtype": "Table",
+            "label": "Allowed Roles",
+            "options": "Apex CRM Role",
+            "description": "Roles that can migrate old data"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "issingle": 1,
+    "links": [],
+    "modified": "2025-12-31 03:28:00",
+    "modified_by": "Administrator",
+    "module": "Apex CRM",
+    "name": "Apex CRM Settings",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

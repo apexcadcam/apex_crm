@@ -25,8 +25,10 @@ app_license = "mit"
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/apex_crm/css/apex_crm.css"
-# app_include_js = ["/assets/apex_crm/js/apex_notifications.js"]
+app_include_css = "/assets/apex_crm/css/apex_cards.css"
+app_include_js = ["/assets/apex_crm/js/site_switcher.js"]
+
+
 
 # include js, css files in header of web template
 # web_include_css = "/assets/apex_crm/css/apex_crm.css"
@@ -47,7 +49,7 @@ doctype_js = {
 	"Lead": "public/js/lead.js"
 }
 doctype_list_js = {
-	"Lead": "public/js/lead_list.js"
+	"Lead": "public/js/lead_list_unified.js"
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -109,18 +111,14 @@ fixtures = [
 			["module", "=", "Apex CRM"]
 		],
 	},
-	# Property Setters - REMOVED: No longer hiding any fields
-	# {
-	# 	"dt": "Property Setter",
-	# 	"filters": [
-	# 		["doc_type", "in", [
-	# 			"Lead",
-	# 			"Opportunity",
-	# 			"Campaign", 
-	# 			"Competitor"
-	# 		]]
-	# 	],
-	# },
+	# Property Setters - Field property modifications
+	{
+		"dt": "Property Setter",
+		"filters": [
+			["doc_type", "=", "Lead"],
+			["module", "=", "Apex CRM"]
+		],
+	},
 	# Client Scripts - CRM Module Customizations
 	{
 		"dt": "Client Script",
@@ -184,9 +182,9 @@ fixtures = [
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+override_doctype_class = {
+	"Lead": "apex_crm.overrides.lead.ApexLead"
+}
 
 # Document Events
 # ---------------

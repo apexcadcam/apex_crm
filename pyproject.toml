@@ -1,12 +1,12 @@
 [project]
 name = "apex_crm"
+version = "1.0.0"
 authors = [
     { name = "Apex Solutions", email = "info@apex-solutions.com"}
 ]
-description = "CRM Application for managing customers and sales"
+description = "Advanced CRM Application for ERPNext with mobile-optimized Lead management, universal search, and comprehensive contact tracking"
 requires-python = ">=3.10"
 readme = "README.md"
-dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
 ]

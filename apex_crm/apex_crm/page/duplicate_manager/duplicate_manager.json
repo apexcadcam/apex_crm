@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2025-12-30 15:52:12.365727",
+ "modified": "2025-12-31 04:10:35.927142",
  "modified_by": "Administrator",
  "module": "Apex CRM",
  "name": "duplicate-manager",
@@ -13,9 +13,6 @@
  "roles": [
   {
    "role": "System Manager"
-  },
-  {
-   "role": "Sales Supervisor"
   }
  ],
  "script": null,
