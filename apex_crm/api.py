@@ -461,6 +461,38 @@ def ignore_group(value, count=0):
     
     return {"status": "success"}
 
+@frappe.whitelist()
+def add_smart_contact(lead, type, value, country_code=None):
+    """
+    Adds a new contact detail to the Lead's Smart Contact list.
+    """
+    if not lead or not type or not value:
+        frappe.throw("Missing required fields: Lead, Type, or Value")
+        
+    doc = frappe.get_doc("Lead", lead)
+    
+    # Check for duplicate in current list
+    exists = False
+    if doc.smart_contact_details:
+        for row in doc.smart_contact_details:
+            if row.type == type and row.value == value:
+                exists = True
+                break
+    
+    if exists:
+        frappe.msgprint(f"Contact {value} already exists.")
+        return {"status": "exists"}
+        
+    # Add new row
+    new_row = doc.append("smart_contact_details", {})
+    new_row.type = type
+    new_row.value = value
+    if country_code:
+        new_row.country_code = country_code
+        
+    doc.save()
+    return {"status": "success", "message": "Contact Added"}
+
 def sync_contacts(doc, method):
 	"""
 	Syncs 'Smart Contact Details' to:

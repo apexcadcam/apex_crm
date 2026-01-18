@@ -3,11 +3,10 @@
 /* CRITICAL: Force horizontal scroll for info pills on all devices */
 .apex-premium-card .card-info-body,
 .card-info-body {
-    overflow-x: scroll !important;
+    overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-x pinch-zoom !important;
-    scroll-behavior: smooth;
+    touch-action: pan-x !important;
     /* Prevent any wrapping */
     flex-wrap: nowrap !important;
     flex-direction: row !important;
@@ -115,7 +114,7 @@
     flex-wrap: nowrap !important;
     flex-direction: row !important;
     gap: 10px;
-    overflow-x: scroll !important;
+    overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: thin;
@@ -126,6 +125,19 @@
     position: relative;
     /* Prevent any wrapping */
     align-items: center;
+    /* Prevent text selection during scroll */
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    /* Improve touch scrolling - allow native momentum */
+    touch-action: pan-x !important;
+    /* Smooth scrolling with momentum */
+    scroll-behavior: auto !important;
+    /* Performance optimization */
+    will-change: scroll-position;
+    /* Smooth momentum on iOS */
+    -webkit-overflow-scrolling: touch !important;
 }
 
 /* Mobile-specific styles for better scrolling */
@@ -133,16 +145,28 @@
     .card-info-body {
         padding: 12px 10px 16px 10px;
         gap: 14px;
-        /* Ensure scroll works on touch devices */
-        touch-action: pan-x pinch-zoom !important;
+        /* Allow native smooth momentum scrolling on touch devices */
+        touch-action: pan-x !important;
         -webkit-overflow-scrolling: touch !important;
-        overflow-x: scroll !important;
+        overflow-x: auto !important;
         overflow-y: hidden !important;
         /* Force scrollbar to be visible on mobile */
         scrollbar-width: auto;
         /* Ensure no wrapping */
         flex-wrap: nowrap !important;
         flex-direction: row !important;
+        /* CRITICAL: Prevent text selection during scroll on mobile */
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+        /* Performance optimization for smooth scrolling */
+        will-change: scroll-position;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
     }
 }
 
@@ -205,6 +229,16 @@
     width: auto;
     /* Prevent any wrapping or shrinking */
     flex: 0 0 auto !important;
+    /* Prevent text selection during touch scroll */
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    /* Allow native scrolling - don't interfere with touch */
+    touch-action: manipulation !important;
+    /* Performance optimization */
+    pointer-events: auto;
 }
 
 /* Mobile: Larger buttons for better touch interaction */
@@ -219,6 +253,14 @@
         flex: 0 0 auto !important;
         /* Larger touch target */
         min-height: 44px;
+        /* CRITICAL: Prevent text selection on mobile */
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+        /* Force touch scrolling instead of text selection */
+        touch-action: pan-x !important;
     }
     
     .info-pill i {
@@ -463,7 +505,13 @@
     display: flex;
     gap: 8px;
     align-items: flex-start;
-    margin-top: 4px;
+    margin-top: 0;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.latest-interaction-box:hover {
+    background: #f9fafb;
 }
 
 /* Status Change Dropdown */

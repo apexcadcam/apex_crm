@@ -13,15 +13,32 @@ window.apex_crm_list = {
     get_icon_for_type: function (type) {
         if (!type) return null;
         type = type.trim();
+        // Normalize common variations
+        const lowerType = type.toLowerCase();
+
         const iconMap = {
-            'Facebook': '<i class="fa fa-facebook" style="color: #1877F2; font-size: 14px;"></i>',
-            'Instagram': '<i class="fa fa-instagram" style="color: #E4405F; font-size: 14px;"></i>',
-            'LinkedIn': '<i class="fa fa-linkedin" style="color: #0A66C2; font-size: 14px;"></i>',
-            'Twitter': '<i class="fa fa-twitter" style="color: #1DA1F2; font-size: 14px;"></i>',
-            'Telegram': '<i class="fa fa-telegram" style="color: #0088cc; font-size: 14px;"></i>'
+            'facebook': '<i class="fa fa-facebook-official" style="color: #1877F2; font-size: 14px;"></i>',
+            'instagram': '<i class="fa fa-instagram" style="color: #E4405F; font-size: 14px;"></i>',
+            'linkedin': '<i class="fa fa-linkedin-square" style="color: #0A66C2; font-size: 14px;"></i>',
+            'twitter': '<i class="fa fa-twitter" style="color: #1DA1F2; font-size: 14px;"></i>',
+            'x': '<i class="fa fa-times" style="color: #000000; font-size: 14px;"></i>', // Using 'times' as FA 4.7 doesn't have X logo, or use text X
+            'telegram': '<i class="fa fa-telegram" style="color: #0088cc; font-size: 14px;"></i>',
+            'whatsapp': '<i class="fa fa-whatsapp" style="color: #25D366; font-size: 14px;"></i>',
+            'tiktok': '<i class="fa fa-music" style="color: #000000; font-size: 14px;"></i>', // Fallback as FA 4.x lacks tiktok
+            'snapchat': '<i class="fa fa-snapchat-ghost" style="color: #FFFC00; font-size: 14px; text-shadow: 0px 0px 1px #000;"></i>',
+            'youtube': '<i class="fa fa-youtube-play" style="color: #FF0000; font-size: 14px;"></i>',
+            'website': '<i class="fa fa-globe" style="color: #555; font-size: 14px;"></i>',
+            'email': '<i class="fa fa-envelope" style="color: #555; font-size: 14px;"></i>',
+            'mobile': '<i class="fa fa-mobile" style="color: #555; font-size: 16px;"></i>',
+            'phone': '<i class="fa fa-phone" style="color: #555; font-size: 14px;"></i>',
+            'address': '<i class="fa fa-map-marker" style="color: #E74C3C; font-size: 14px;"></i>',
+            'location': '<i class="fa fa-map-marker" style="color: #E74C3C; font-size: 14px;"></i>'
         };
-        // Handles case insensitivity roughly via fallback
-        return iconMap[type] || iconMap[type.charAt(0).toUpperCase() + type.slice(1)] || null;
+
+        // Specific checks/overrides
+        if (lowerType === 'x') return '<span style="font-family: sans-serif; font-weight: 900; font-size: 14px; color: #000;">𝕏</span>'; // Unicode fallback for X
+
+        return iconMap[lowerType] || null;
     },
     handle_switch: function (select) {
         let idx = parseInt(select.value);
@@ -36,7 +53,7 @@ window.apex_crm_list = {
         let countryCodeHtml = '';
         let displayVal = val.replace(/[📱☎️📧📍🌐🏠💬]/g, '').trim();
 
-        if (countryCode && !socialIcon) {
+        if (countryCode && !socialIcon && ['Mobile', 'Phone', 'WhatsApp'].includes(type)) {
             let normalizedCC = countryCode.trim();
             if (!normalizedCC.startsWith('+')) normalizedCC = '+' + normalizedCC;
             if (!displayVal.startsWith(normalizedCC)) {
@@ -45,22 +62,97 @@ window.apex_crm_list = {
             }
         }
 
-        if (socialIcon) countryCodeHtml = socialIcon;
-        else countryCodeHtml = ''; // No flag needed if number has country code
-
         let flagSpan = parent.querySelector('.sw-flag');
-        if (flagSpan) flagSpan.innerHTML = countryCodeHtml;
-
-        let valSpan = parent.querySelector('.sw-value');
-        if (valSpan) {
-            valSpan.textContent = displayVal;
-            valSpan.title = displayVal;
+        if (socialIcon) {
+            flagSpan.innerHTML = socialIcon;
+        } else {
+            // For non-social/non-specific types, clear or show default
+            flagSpan.innerHTML = '';
         }
+
+        let linkAnchor = parent.querySelector('a.sw-link');
+        let textSpan = parent.querySelector('.sw-value');
+
+        // Update Link Logic
+        let href = '#';
+        const lowerType = type.toLowerCase();
+
+        if (val.startsWith('http')) {
+            href = val;
+        } else if (lowerType === 'email') {
+            href = `mailto:${val}`;
+        } else if (['mobile', 'phone'].includes(lowerType)) {
+            href = `tel:${val}`;
+        } else if (lowerType === 'whatsapp') {
+            let clean = val.replace(/\D/g, '');
+            href = `https://wa.me/${clean}`;
+        } else if (lowerType === 'telegram') {
+            let clean = val.replace('@', '');
+            href = `https://t.me/${clean}`;
+        } else if (lowerType === 'instagram') {
+            let clean = val.replace('@', '');
+            if (!clean.startsWith('http')) href = `https://instagram.com/${clean}`;
+        } else if (lowerType === 'facebook') {
+            if (!val.startsWith('http')) href = `https://facebook.com/${val}`;
+        } else if (lowerType === 'twitter' || lowerType === 'x') {
+            let clean = val.replace('@', '');
+            if (!clean.startsWith('http')) href = `https://x.com/${clean}`;
+        } else if (lowerType === 'tiktok') {
+            let clean = val.replace('@', '');
+            if (!clean.startsWith('http')) href = `https://tiktok.com/@${clean}`;
+        } else if (lowerType === 'snapchat') {
+            let clean = val.replace('@', '');
+            if (!clean.startsWith('http')) href = `https://snapchat.com/add/${clean}`;
+        } else if (lowerType === 'linkedin') {
+            if (!val.startsWith('http')) href = `https://linkedin.com/in/${val}`;
+        }
+
+        if (href !== '#') {
+            // If it was just text, replace with link structure if needed, 
+            // BUT simpler is to just update the existing anchor if present, or toggle structure.
+            // Current structure is complex, let's just update the HREF if it's an anchor, 
+            // or the parent onclick if we want the whole pill clickable (but we have a select covering it).
+            // Actually, the structure in formatters.smart_contact_summary puts the link INSIDE the .switcher-display
+
+            if (linkAnchor) {
+                linkAnchor.href = href;
+                linkAnchor.querySelector('.sw-value').textContent = displayVal;
+                // Icon update handled above via flagSpan check, but linkAnchor might have its own icon span?
+                // In formatters, the link wraps the icon and text.
+                // Let's re-render the content area to be safe or target specific children.
+                let iconContainer = linkAnchor.querySelector('.sw-flag') || linkAnchor.querySelector('i') || linkAnchor.querySelector('span:first-child');
+                if (iconContainer) iconContainer.outerHTML = socialIcon || '';
+            } else {
+                // Convert Text to Link? Too complex for this handler?
+                // Let's just update text for now if no link anchor exists.
+                if (textSpan) textSpan.textContent = displayVal;
+            }
+        } else {
+            if (textSpan) textSpan.textContent = displayVal;
+        }
+
+        // Re-bind click on the new selected link if we updated href? 
+        // The select is on top, so click goes to select... 
+        // Wait, if select covers everything, we can't click the link!
+        // The select has opacity 0. 
+        // DESIGN FLAW: If we want clickable links, the select cannot cover the link area.
+        // The user wants to click the icon/text to go to the link.
+        // We might need a small "Edit/Switch" arrow for the select, and leave the main area for the link.
+        // checking the HTML structure: 
+        // <div class="switcher-display"> ... link ... <select ... width:100% ...> </div>
+        // The select covers EVERYTHING. So links are UNCLICKABLE currently!
+        // The "Action" logic needs to handle this.
+
+        // FIX: We need to detecting "Change" vs "Click".
+        // But select intercepts clicks.
+        // Alternative: The select is only for switching. 
+        // Once switched, how do we click?
+        // Maybe the select should be small arrow only?
     }
 };
 
 frappe.listview_settings['Lead'] = {
-    add_fields: ['mobile_no', 'title', 'company', 'status', 'email_id', 'city', 'state', 'country', 'territory', 'lead_name', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index', 'lead_owner', 'type', 'request_type'],
+    add_fields: ['title', 'status', 'mobile_no', 'company_name', 'email_id', 'city', 'territory', 'lead_owner', 'type', 'request_type', 'source', 'lead_name', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index'],
 
     formatters: {
         smart_contact_summary: function (value, doc) {
@@ -92,7 +184,7 @@ frappe.listview_settings['Lead'] = {
             let countryCode0 = c0.country_code || '';
             let socialIcon0 = window.apex_crm_list.get_icon_for_type(type0);
             let displayVal = val0.replace(/[📱☎️📧📍🌐🏠💬]/g, '').trim();
-            if (countryCode0 && !socialIcon0) {
+            if (countryCode0 && !socialIcon0 && ['Mobile', 'Phone'].includes(type0)) {
                 let normalizedCC = countryCode0.trim();
                 if (!normalizedCC.startsWith('+')) normalizedCC = '+' + normalizedCC;
                 if (!displayVal.startsWith(normalizedCC)) {
@@ -107,30 +199,66 @@ frappe.listview_settings['Lead'] = {
             }).join('');
             let contactsJson = encodeURIComponent(JSON.stringify(contacts));
 
-            let linkHtml = '';
-            if (socialIcon0) {
-                let href = '#';
-                // Simple link generation logic (expand if needed)
-                if (val0.startsWith('http')) href = val0;
-                else if (type0 === 'Telegram' && val0.startsWith('@')) href = `https://t.me/${val0.substring(1)}`;
-
-                if (href !== '#') {
-                    linkHtml = `<a href="${href}" target="_blank" onclick="event.stopPropagation();" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">${countryCodeHtml0} <span style="font-weight: 400; color: #333; font-size: 13px;">${displayVal}</span></a>`;
-                }
+            let href = '#';
+            const lowerType = type0.toLowerCase();
+            if (val0.startsWith('http')) {
+                href = val0;
+            } else if (lowerType === 'email') {
+                href = `mailto:${val0}`;
+            } else if (['mobile', 'phone'].includes(lowerType)) {
+                href = `tel:${val0}`;
+            } else if (lowerType === 'whatsapp') {
+                let clean = val0.replace(/\D/g, '');
+                href = `https://wa.me/${clean}`;
+            } else if (lowerType === 'telegram') {
+                let clean = val0.replace('@', '');
+                href = `https://t.me/${clean}`;
+            } else if (lowerType === 'instagram') {
+                let clean = val0.replace('@', '');
+                if (!clean.startsWith('http')) href = `https://instagram.com/${clean}`;
+            } else if (lowerType === 'facebook') {
+                if (!val0.startsWith('http')) href = `https://facebook.com/${val0}`;
+            } else if (lowerType === 'twitter' || lowerType === 'x') {
+                let clean = val0.replace('@', '');
+                if (!clean.startsWith('http')) href = `https://x.com/${clean}`;
+            } else if (lowerType === 'tiktok') {
+                let clean = val0.replace('@', '');
+                if (!clean.startsWith('http')) href = `https://tiktok.com/@${clean}`;
+            } else if (lowerType === 'snapchat') {
+                let clean = val0.replace('@', '');
+                if (!clean.startsWith('http')) href = `https://snapchat.com/add/${clean}`;
+            } else if (lowerType === 'linkedin') {
+                if (!val0.startsWith('http')) href = `https://linkedin.com/in/${val0}`;
             }
+
+            // Interaction Logic:
+            // Design Adjustment: The SELECT currently covers everything (width: 100%, height: 100%).
+            // This prevents clicking the link.
+            // Solution: Make the SELECT only cover a small "switcher" area (the caret), 
+            // or use a different interaction model.
+            // Request: User wants "Direct to the right links".
+            // So clicking the icon/text MUST open the link.
+            // The switcher should be secondary (e.g., small caret).
 
             return `
             <div class="contact-switcher-widget-list" style="display:flex; align-items:center;">
-                 <div class="switcher-display" style="position: relative; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; max-width: 300px;">
-                        ${linkHtml || `<span class="sw-flag">${countryCodeHtml0}</span><span class="sw-value" style="font-weight: 400; color: #333; font-size: 13px;">${displayVal}</span>`}
-                        <i class="fa fa-caret-down" style="color: #888; font-size: 10px; margin-left: 4px;"></i>
-                        <select class="switcher-select"
-                            onchange="window.apex_crm_list.handle_switch(this)"
-                            onclick="event.stopPropagation();"
-                            data-contacts="${contactsJson}"
-                            style="position: absolute; top:0; left:0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
-                            ${optionsHtml}
-                        </select>
+                 <div class="switcher-display" style="position: relative; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; display: inline-flex; align-items: center; gap: 6px; max-width: 300px;">
+                        <a href="${href}" target="_blank" class="sw-link" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: inherit;" onclick="event.stopPropagation();">
+                            <span class="sw-flag">${countryCodeHtml0}</span>
+                            <span class="sw-value" style="font-weight: 400; color: #333; font-size: 13px;">${displayVal}</span>
+                        </a>
+                        
+                        <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-left: 4px;">
+                            <i class="fa fa-caret-down" style="color: #888; font-size: 10px;"></i>
+                            <select class="switcher-select"
+                                onchange="window.apex_crm_list.handle_switch(this)"
+                                onclick="event.stopPropagation();"
+                                data-contacts="${contactsJson}"
+                                style="position: absolute; top:0; left:0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
+                                title="Switch Contact">
+                                ${optionsHtml}
+                            </select>
+                        </div>
                  </div>
             </div>`;
         }
@@ -275,39 +403,95 @@ window.apex_crm_route_to_prospects = function (lead_name) {
 };
 
 // HELPER: Quick Add
+// HELPER: Quick Add Smart Contact
 window.apex_crm_quick_add = function (lead_name) {
     const d = new frappe.ui.Dialog({
-        title: __('Quick Add'),
+        title: __('Add Contact'),
         fields: [
-            { label: 'Type', fieldname: 'action_type', fieldtype: 'Select', options: 'Log Call\nNew Task\nNew Event\nNew Note', reqd: 1 },
-            { label: 'Details', fieldname: 'details', fieldtype: 'Small Text' },
-            { "fieldname": "date", "fieldtype": "Date", "label": "Due Date", "default": frappe.datetime.get_today() }
-        ],
-        primary_action_label: 'Create',
-        primary_action(values) {
-            if (values.action_type === 'New Task') {
-                frappe.model.with_doctype('ToDo', function () {
-                    var doc = frappe.model.get_new_doc('ToDo');
-                    doc.description = values.details || 'Follow up with ' + lead_name;
-                    doc.date = values.date;
-                    doc.reference_type = 'Lead';
-                    doc.reference_name = lead_name;
-                    frappe.set_route('Form', 'ToDo', doc.name);
-                    d.hide();
-                });
-            } else if (values.action_type === 'Log Call') {
-                // Route to Interaction Log? Or just simple log?
-                // Let's route to Interaction Log list for now or open a simple dialog?
-                // Simple:
-                frappe.new_doc('Apex Interaction Log', { parent: lead_name, parenttype: 'Lead', summary: values.details });
-                d.hide();
-            } else if (values.action_type === 'New Note') {
-                frappe.call({ method: 'apex_crm.api.add_lead_note', args: { lead: lead_name, content: values.details }, callback: () => { d.hide(); frappe.show_alert('Note Added'); if (window.global_listview_ref) window.apex_crm_fetch_data(window.global_listview_ref.data); } });
-            } else {
-                d.hide();
+            {
+                label: 'Type',
+                fieldname: 'type',
+                fieldtype: 'Select',
+                options: 'Mobile\nPhone\nWhatsApp\nEmail\nFacebook\nInstagram\nLinkedIn\nTikTok\nSnapchat\nX\nTelegram\nWebsite\nAddress\nLocation\nOther',
+                reqd: 1,
+                default: 'Mobile',
+                onchange: function () {
+                    const val = this.get_value();
+                    const isPhone = ['Mobile', 'Phone', 'WhatsApp'].includes(val);
+                    d.set_df_property('country_code', 'hidden', !isPhone);
+                    d.set_df_property('country_code', 'reqd', isPhone);
+                }
+            },
+            {
+                label: 'Country Code',
+                fieldname: 'country_code',
+                fieldtype: 'Select',
+                options: '\n+20\n+966\n+971\n+965\n+974\n+973\n+968\n+967\n+964\n+249\n+218\n+213\n+212\n+216\n+962\n+961\n+963\n+970\n+252\n+253\n+269\n+222\n+1\n+44',
+                default: '+20',
+                hidden: 0 // Default since Mobile is default
+            },
+            {
+                label: 'Value / Number',
+                fieldname: 'value',
+                fieldtype: 'Data',
+                reqd: 1,
+                onchange: function () {
+                    let val = this.get_value();
+                    if (!val) return;
+                    val = val.toLowerCase();
+                    let type = '';
+                    // Basic heuristic for common social links
+                    if (val.includes('instagram.com')) type = 'Instagram';
+                    else if (val.includes('facebook.com')) type = 'Facebook';
+                    else if (val.includes('tiktok.com')) type = 'TikTok';
+                    else if (val.includes('snapchat.com')) type = 'Snapchat';
+                    else if (val.includes('linkedin.com')) type = 'LinkedIn';
+                    else if (val.includes('x.com') || val.includes('twitter.com')) type = 'X';
+                    else if (val.includes('t.me')) type = 'Telegram';
+                    else if (val.includes('whatsapp.com') || val.includes('wa.me')) type = 'WhatsApp';
+                    else if (val.includes('@') && !val.includes(' ') && !val.startsWith('http')) type = 'Email';
+
+                    if (type) {
+                        d.set_value('type', type);
+                        // Trigger type change to update country code visibility
+                        if (d.fields_dict.type && d.fields_dict.type.df.onchange) {
+                            d.fields_dict.type.df.onchange.apply(d.fields_dict.type);
+                        }
+                    }
+                }
             }
+        ],
+        primary_action_label: 'Add',
+        primary_action(values) {
+            frappe.call({
+                method: 'apex_crm.api.add_smart_contact',
+                args: {
+                    lead: lead_name,
+                    type: values.type,
+                    value: values.value,
+                    country_code: values.country_code
+                },
+                freeze: true,
+                callback: function (r) {
+                    if (!r.exc) {
+                        d.hide();
+                        frappe.show_alert({ message: __('Contact Added'), indicator: 'green' });
+                        // Refresh data if available
+                        if (window.global_listview_ref && window.global_listview_ref.data) {
+                            if (window.apex_crm_fetch_data) {
+                                window.apex_crm_fetch_data(window.global_listview_ref.data);
+                            } else {
+                                window.location.reload();
+                            }
+                        } else {
+                            window.location.reload();
+                        }
+                    }
+                }
+            });
         }
     });
+
     d.show();
 };
 
@@ -944,10 +1128,20 @@ function setupLeadCardView(listview) {
         // Determine Button Visibility based on Current Type
         const t = (currentType || '').toLowerCase();
         const showEmail = t.includes('email');
-        const showFb = t.includes('facebook');
-        const showWeb = t.includes('website');
         const showMap = t.includes('address') || t.includes('location');
-        const showMobile = !showEmail && !showFb && !showWeb && !showMap; // Default Group
+
+        // Strict Mobile Check: explicit phone types OR fallback if empty type & numeric-ish interaction
+        const showMobile = ['mobile', 'phone', 'whatsapp', 'sms'].some(x => t.includes(x)) || (!t && !currentVal.includes('http') && !currentVal.includes('@'));
+
+        // Everything else is a Link (Web, Social, etc.)
+        const showLink = !showMobile && !showEmail && !showMap;
+
+        // Dynamic Icon for the Link Button
+        let linkIconHtml = '<i class="fa fa-globe"></i>';
+        if (showLink) {
+            let specificIcon = window.apex_crm_list.get_icon_for_type(currentType);
+            if (specificIcon) linkIconHtml = specificIcon;
+        }
 
         // Truncate for Display
         let displayText = currentVal || 'Select Contact';
@@ -956,9 +1150,17 @@ function setupLeadCardView(listview) {
         }
 
         // Icon HTML
-        let iconHtml = `<span class="flag-icon" style="margin-right:6px;">${currentIcon}</span>`;
-        if (currentIcon && currentIcon.startsWith('fa-')) {
-            iconHtml = `<span class="flag-icon" style="margin-right:6px;"><i class="fa ${currentIcon}"></i></span>`;
+        // Icon HTML - Refactored to use centralized helper
+        let iconHtml = '';
+        let helperIcon = window.apex_crm_list.get_icon_for_type(currentType);
+
+        if (helperIcon) {
+            // Helper returns full <i> tag or <span>. Use it directly.
+            // But we need to wrap it in flag-icon for styling consistency if needed
+            iconHtml = `<span class="flag-icon" style="margin-right:6px;">${helperIcon}</span>`;
+        } else {
+            // Fallback
+            iconHtml = `<span class="flag-icon" style="margin-right:6px;">${currentIcon || '📞'}</span>`;
         }
 
         // 6. TOGGLE CONTACT DETAILS (INTERACTIVE)
@@ -985,18 +1187,16 @@ function setupLeadCardView(listview) {
             $phoneDisplay.text(displayValue);
 
             // Update Icon
-            const iconMap = { 'WhatsApp': '💬', 'Mobile': '📱', 'Phone': '📞', 'Email': '✉️', 'Facebook': 'fa-facebook', 'Website': '🌐', 'Address': '📍', 'Location': '📍' };
-            // Use passed icon or map fallback
-            let finalIcon = icon;
-            if (!finalIcon || finalIcon === 'circle') finalIcon = iconMap[type] || '📞';
-
-            // Handle FA icons in selection display
-            if (finalIcon && finalIcon.startsWith('fa-')) {
-                $flag.html(`<i class="fa ${finalIcon}"></i>`);
-            } else if (finalIcon && !finalIcon.match(/[\u0000-\u007F]/)) {
-                $flag.text(finalIcon);
+            // Update Icon
+            const socialIcon = window.apex_crm_list.get_icon_for_type(type);
+            if (socialIcon) {
+                $flag.html(socialIcon);
             } else {
-                $flag.text('📞'); // default
+                // Fallback
+                const iconMap = { 'WhatsApp': '💬', 'Mobile': '📱', 'Phone': '📞', 'Email': '✉️', 'Facebook': 'fa-facebook', 'Website': '🌐', 'Address': '📍', 'Location': '📍' };
+                let fallback = iconMap[type] || '📞';
+                if (fallback.startsWith('fa-')) $flag.html(`<i class="fa ${fallback}"></i>`);
+                else $flag.text(fallback);
             }
 
             // Update Data Current
@@ -1013,20 +1213,12 @@ function setupLeadCardView(listview) {
             if (typeLower.includes('email')) {
                 $btns.find('.btn-email').attr('onclick', `event.stopPropagation(); window.location.href = 'mailto:${value}';`).show();
             }
-            // FACEBOOK TYPE
-            else if (typeLower.includes('facebook')) {
-                $btns.find('.btn-facebook').attr('onclick', `event.stopPropagation(); window.open('${value.startsWith('http') ? value : 'https://' + value}', '_blank');`).show();
-            }
-            // WEBSITE TYPE
-            else if (typeLower.includes('website')) {
-                $btns.find('.btn-website').attr('onclick', `event.stopPropagation(); window.open('${value.startsWith('http') ? value : 'https://' + value}', '_blank');`).show();
-            }
             // ADDRESS / LOCATION TYPE
             else if (typeLower.includes('address') || typeLower.includes('location')) {
                 $btns.find('.btn-map').attr('onclick', `event.stopPropagation(); window.open('https://maps.google.com/?q=${encodeURIComponent(value)}', '_blank');`).show();
             }
             // PHONE / MOBILE / WHATSAPP TYPE
-            else {
+            else if (['mobile', 'phone', 'whatsapp', 'sms'].some(x => typeLower.includes(x)) || (!type && !value.includes('http') && !value.includes('@'))) {
                 $btns.find('.btn-call').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'Call', '${value}');`).show();
 
                 // Show/Hide WhatsApp/SMS based on type logic
@@ -1034,6 +1226,27 @@ function setupLeadCardView(listview) {
                     $btns.find('.btn-whatsapp').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'WhatsApp', '${value}');`).show();
                     $btns.find('.btn-sms').attr('onclick', `event.stopPropagation(); window.apex_crm_log_interaction_dialog('${lead_name}', 'SMS', '${value}');`).show();
                 }
+            }
+            // DYNAMIC LINK TYPE (Everything else)
+            else {
+                let linkBtn = $btns.find('.btn-link-action');
+                if (linkBtn.length === 0) {
+                    // Fallback if cached version missing class
+                    linkBtn = $btns.find('.btn-website');
+                    if (linkBtn.length === 0) {
+                        // Inject if missing (rare case of old DOM)
+                        $btns.append(`<button class="quick-btn btn-link-action" onclick="event.stopPropagation();"><i class="fa fa-globe"></i></button>`);
+                        linkBtn = $btns.find('.btn-link-action');
+                    }
+                }
+
+                // Update Icon
+                let socialIcon = window.apex_crm_list.get_icon_for_type(type);
+                if (socialIcon) linkBtn.html(socialIcon);
+                else linkBtn.html('<i class="fa fa-globe"></i>');
+
+                // Update Action
+                linkBtn.attr('onclick', `event.stopPropagation(); window.open('${value.startsWith('http') ? value : 'https://' + value}', '_blank');`).show();
             }
 
             // Close updated popover
@@ -1082,20 +1295,18 @@ function setupLeadCardView(listview) {
                     } else {
                         contacts.forEach(c => {
                             // Correct Icon Mapping
-                            const typeLower = (c.type || '').toLowerCase();
-                            let listIconHtml = '';
-                            let displayIcon = '📞';
+                            // Correct Icon Mapping using Central Helper
+                            // const typeLower = (c.type || '').toLowerCase(); // Not needed if we use helper
+                            let listIconHtml = window.apex_crm_list.get_icon_for_type(c.type);
+                            if (!listIconHtml) {
+                                // Fallbacks if helper returns null (unlikely with "Other")
+                                if ((c.type || '').toLowerCase().includes('mobile')) listIconHtml = '<i class="fa fa-mobile" style="font-size:16px;"></i>';
+                                else listIconHtml = '<i class="fa fa-circle-o"></i>';
+                            }
 
-                            if (typeLower.includes('email')) { listIconHtml = '<span>✉️</span>'; displayIcon = '✉️'; }
-                            else if (typeLower.includes('mobile')) { listIconHtml = '<span>📱</span>'; displayIcon = '📱'; }
-                            else if (typeLower.includes('phone')) { listIconHtml = '<span>📞</span>'; displayIcon = '📞'; }
-                            else if (typeLower.includes('whatsapp')) { listIconHtml = '<span>💬</span>'; displayIcon = '💬'; }
-                            else if (typeLower.includes('website')) { listIconHtml = '<span>🌐</span>'; displayIcon = '🌐'; }
-                            else if (typeLower.includes('facebook')) { listIconHtml = '<i class="fa fa-facebook"></i>'; displayIcon = 'fa-facebook'; }
-                            else if (typeLower.includes('address') || typeLower.includes('location')) { listIconHtml = '<span>📍</span>'; displayIcon = '📍'; }
-                            else if (c.icon && c.icon.startsWith('fa-')) { listIconHtml = `<i class="${c.icon}"></i>`; displayIcon = c.icon; }
-                            else if (c.icon && !c.icon.includes('-')) { listIconHtml = `<i class="fa fa-${c.icon}"></i>`; displayIcon = c.icon; }
-                            else { listIconHtml = '<span>📞</span>'; }
+                            // displayIcon is passed to select_contact. 
+                            // select_contact now uses get_icon_for_type(type) so we can pass null or dummy.
+                            let displayIcon = 'circle';
 
                             // Create jQuery element safely
                             const $item = $(`
@@ -1157,6 +1368,7 @@ function setupLeadCardView(listview) {
                             
                             <!-- New Fields: Owner, Type, Request -->
                             <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; margin-bottom: 2px;">
+                                ${doc.source ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.source}</span>` : ''}
                                 ${doc.lead_owner ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.lead_owner}</span>` : ''}
                                 ${doc.type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.type}</span>` : ''}
                                 ${doc.request_type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.request_type}</span>` : ''}
@@ -1190,30 +1402,33 @@ function setupLeadCardView(listview) {
                         <button class="quick-btn btn-sms" style="${showMobile ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.apex_crm_log_interaction_dialog('${doc.name}', 'SMS', '${currentVal}');"><i class="fa fa-comment"></i></button>
                         
                         <!-- Email Action -->
+                        <!-- Email Action -->
                          <button class="quick-btn btn-email" style="${showEmail ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.location.href = 'mailto:${currentVal}';"><i class="fa fa-envelope"></i></button>
-                         <!-- Website Action -->
-                         <button class="quick-btn btn-website" style="${showWeb ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('${currentVal.startsWith('http') ? currentVal : 'https://' + currentVal}', '_blank');"><i class="fa fa-globe"></i></button>
-                         <!-- Facebook Action -->
-                         <button class="quick-btn btn-facebook" style="${showFb ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('${currentVal.startsWith('http') ? currentVal : 'https://' + currentVal}', '_blank');"><i class="fa fa-facebook"></i></button>
+                         
+                         <!-- Dynamic Link Action (Web/Social) -->
+                         <button class="quick-btn btn-link-action" style="${showLink ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('${currentVal.startsWith('http') ? currentVal : 'https://' + currentVal}', '_blank');">${linkIconHtml}</button>
+                         
+                         <!-- Map Action -->
+                         <button class="quick-btn btn-map" style="${showMap ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('https://maps.google.com/?q=${encodeURIComponent(currentVal)}', '_blank');"><i class="fa fa-map-marker"></i></button>
                          <!-- Map Action -->
                          <button class="quick-btn btn-map" style="${showMap ? '' : 'display:none;'}" onclick="event.stopPropagation(); window.open('https://maps.google.com/?q=${encodeURIComponent(currentVal)}', '_blank');"><i class="fa fa-map-marker"></i></button>
                     </div>
                 </div>
 
-                <div class="card-info-body">
-                    <div class="info-pill pill-notes" onclick="event.stopPropagation(); window.apex_crm_show_notes('${doc.name}');"><i class="fa fa-sticky-note"></i> Notes <span class="count-notes">0</span></div>
-                    <div class="info-pill pill-tasks" onclick="event.stopPropagation(); window.apex_crm_show_tasks('${doc.name}');"><i class="fa fa-check-square"></i> Tasks <span class="count-tasks">0</span></div>
+                <div class="card-info-body" style="display: flex !important; flex-wrap: wrap !important; overflow: visible !important; gap: 4px !important; padding: 4px 0 !important; width: 100% !important;">
+                    <div class="info-pill pill-notes" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_notes('${doc.name}');"><i class="fa fa-sticky-note" style="font-size: 10px !important; margin-right: 4px;"></i> Notes <span class="count-notes" style="margin-left: 4px;">0</span></div>
+                    <div class="info-pill pill-tasks" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_tasks('${doc.name}');"><i class="fa fa-check-square" style="font-size: 10px !important; margin-right: 4px;"></i> Tasks <span class="count-tasks" style="margin-left: 4px;">0</span></div>
                     
                     <!-- Event: Dialog -->
-                    <div class="info-pill pill-events" onclick="event.stopPropagation(); window.apex_crm_show_events('${doc.name}');"><i class="fa fa-calendar"></i> Events <span class="count-events">0</span></div>
+                    <div class="info-pill pill-events" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_events('${doc.name}');"><i class="fa fa-calendar" style="font-size: 10px !important; margin-right: 4px;"></i> Events <span class="count-events" style="margin-left: 4px;">0</span></div>
                     
-                    <div class="info-pill pill-quotes" onclick="event.stopPropagation(); window.apex_crm_show_quotes('${doc.name}');"><i class="fa fa-file-text"></i> Quotes <span class="count-quotes">0</span></div>
+                    <div class="info-pill pill-quotes" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_quotes('${doc.name}');"><i class="fa fa-file-text" style="font-size: 10px !important; margin-right: 4px;"></i> Quotes <span class="count-quotes" style="margin-left: 4px;">0</span></div>
                     
                     <!-- Prospect: Dialog -->
-                    <div class="info-pill pill-prospects" onclick="event.stopPropagation(); window.apex_crm_show_prospects('${doc.name}');"><i class="fa fa-users"></i> Prosp <span class="count-prospects">0</span></div>
+                    <div class="info-pill pill-prospects" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_prospects('${doc.name}');"><i class="fa fa-users" style="font-size: 10px !important; margin-right: 4px;"></i> Prosp <span class="count-prospects" style="margin-left: 4px;">0</span></div>
                     
-                    <div class="info-pill pill-opportunities" onclick="event.stopPropagation(); window.apex_crm_show_opportunities('${doc.name}');"><i class="fa fa-lightbulb-o"></i> Opp <span class="count-opportunities">0</span></div>
-                    <div class="info-pill pill-customers" onclick="event.stopPropagation(); window.apex_crm_show_customers('${doc.name}');"><i class="fa fa-user-circle"></i> Cust <span class="count-customers">0</span></div>
+                    <div class="info-pill pill-opportunities" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_opportunities('${doc.name}');"><i class="fa fa-lightbulb-o" style="font-size: 10px !important; margin-right: 4px;"></i> Opp <span class="count-opportunities" style="margin-left: 4px;">0</span></div>
+                    <div class="info-pill pill-customers" style="height: 22px !important; min-height: 0 !important; padding: 0 8px !important; font-size: 11px !important; display: flex !important; align-items: center !important; flex: 0 0 auto !important;" onclick="event.stopPropagation(); window.apex_crm_show_customers('${doc.name}');"><i class="fa fa-user-circle" style="font-size: 10px !important; margin-right: 4px;"></i> Cust <span class="count-customers" style="margin-left: 4px;">0</span></div>
                 </div>
                 
                 <!-- CLICKABLE INTERACTION FOOTER -->
@@ -1247,7 +1462,10 @@ function setupLeadCardView(listview) {
     setTimeout(() => {
 
         // A. INJECT CSS FORCEFULLY - Clean up empty space
-        const styleId = 'apex-mobile-cleaner-v6';
+        const styleId = 'apex-mobile-cleaner-v7';
+        // Remove old versions if they exist to prevent conflicts
+        $('#apex-mobile-cleaner-v6').remove();
+
         if ($(`#${styleId}`).length === 0) {
             $('head').append(`
                 <style id="${styleId}">
@@ -1325,15 +1543,15 @@ function setupLeadCardView(listview) {
                             width: 100% !important;
                         }
                         
-                        /* Hide scrollbar styles as no longer needed */
+                        /* Hide scrollbar styles */
                         .card-info-body::-webkit-scrollbar {
                             display: none;
                         }
                         
-                        /* NEW: Larger Pills */
+                        /* NEW: Compact Pills */
                         .info-pill {
                             flex: 0 0 auto !important;
-                            padding: 8px 12px !important;
+                            padding: 4px 10px !important; /* REDUCED HEIGHT */
                             font-size: 13px !important;
                             border-radius: 20px !important;
                             background: #f3f4f6;
@@ -1510,6 +1728,104 @@ function setupLeadCardView(listview) {
                 cards_html += createPremiumCard(doc);
             });
             $cards.html(cards_html);
+
+            // CRITICAL: Prevent text selection during touch scroll on mobile
+            // Optimized touch handlers for smoother scrolling while preventing text selection
+            $cards.find('.card-info-body').each(function () {
+                const $scrollContainer = $(this);
+                let isScrolling = false;
+                let touchStartX = 0;
+                let touchStartY = 0;
+                let scrollStartX = 0;
+                let touchStartTime = 0;
+
+                // Prevent text selection during touch drag
+                $scrollContainer.on('touchstart', function (e) {
+                    touchStartX = e.originalEvent.touches[0].clientX;
+                    touchStartY = e.originalEvent.touches[0].clientY;
+                    scrollStartX = this.scrollLeft;
+                    touchStartTime = Date.now();
+                    isScrolling = false;
+
+                    // Prevent text selection
+                    if (window.getSelection) {
+                        window.getSelection().removeAllRanges();
+                    }
+                });
+
+                $scrollContainer.on('touchmove', function (e) {
+                    const touchX = e.originalEvent.touches[0].clientX;
+                    const touchY = e.originalEvent.touches[0].clientY;
+                    const deltaX = Math.abs(touchX - touchStartX);
+                    const deltaY = Math.abs(touchY - touchStartY);
+
+                    // If horizontal movement is more than vertical, it's a scroll
+                    if (deltaX > deltaY && deltaX > 5) {
+                        isScrolling = true;
+
+                        // Prevent text selection during scroll - use requestAnimationFrame for smoother scrolling
+                        e.preventDefault();
+
+                        // Use requestAnimationFrame for smoother scroll performance
+                        requestAnimationFrame(() => {
+                            this.scrollLeft = scrollStartX - (touchX - touchStartX);
+                        });
+
+                        // Clear any selection
+                        if (window.getSelection) {
+                            window.getSelection().removeAllRanges();
+                        }
+                    }
+                });
+
+                $scrollContainer.on('touchend', function (e) {
+                    // If it was a scroll, prevent click events that might select text
+                    if (isScrolling) {
+                        // Only prevent if it was clearly a scroll gesture
+                        const touchDuration = Date.now() - touchStartTime;
+                        if (touchDuration < 300) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+
+                        // Clear selection
+                        if (window.getSelection) {
+                            window.getSelection().removeAllRanges();
+                        }
+                    }
+                    isScrolling = false;
+                });
+
+                // Also prevent text selection on mouse drag (desktop)
+                $scrollContainer.on('mousedown', function (e) {
+                    if (e.target.closest('.info-pill')) {
+                        // Only prevent if dragging, not clicking
+                        let isDragging = false;
+                        const startX = e.clientX;
+                        const startScrollLeft = this.scrollLeft;
+
+                        const onMouseMove = (moveE) => {
+                            const deltaX = moveE.clientX - startX;
+                            if (Math.abs(deltaX) > 5) {
+                                isDragging = true;
+                                this.scrollLeft = startScrollLeft - deltaX;
+                                // Prevent text selection during drag
+                                if (window.getSelection) {
+                                    window.getSelection().removeAllRanges();
+                                }
+                            }
+                        };
+
+                        const onMouseUp = () => {
+                            $(document).off('mousemove', onMouseMove);
+                            $(document).off('mouseup', onMouseUp);
+                        };
+
+                        $(document).on('mousemove', onMouseMove);
+                        $(document).on('mouseup', onMouseUp);
+                    }
+                });
+            });
 
             // Fetch Async Data (Stats)
             if (window.apex_crm_fetch_data) {
