@@ -601,6 +601,51 @@ def sync_contacts(doc, method):
 				search_index_parts.append(interaction.summary)
 
 
+	# F. [NEW] Include Related Documents (Quotation, Opportunity, Prospect, Customer)
+	
+	# 1. Quotations (Linked via party_name=Lead)
+	quotations = frappe.get_all("Quotation",
+		filters={"party_name": doc.name, "docstatus": ["<", 2]}, # Exclude cancelled
+		fields=["name", "status"])
+	if quotations:
+		search_index_parts.append("HasQuotation") # Marker for existence check
+	for q in quotations:
+		search_index_parts.append(q.name) # Index Quotation ID
+		if q.status: search_index_parts.append(q.status)
+
+	# 2. Opportunities (Linked via party_name=Lead)
+	opportunities = frappe.get_all("Opportunity",
+		filters={"party_name": doc.name, "docstatus": ["<", 2]},
+		fields=["name", "title", "status"])
+	if opportunities:
+		search_index_parts.append("HasOpportunity")
+	for o in opportunities:
+		search_index_parts.append(o.name)
+		if o.title: search_index_parts.append(o.title)
+		if o.status: search_index_parts.append(o.status)
+
+	# 3. Prospect
+	try:
+		prospects = frappe.get_all("Prospect",
+			filters={"lead": doc.name},
+			fields=["name", "company_name"])
+		if prospects:
+			search_index_parts.append("HasProspect")
+		for p in prospects:
+			search_index_parts.append(p.name)
+			if p.company_name: search_index_parts.append(p.company_name)
+	except Exception:
+		pass
+
+	# 4. Customer (If converted)
+	if doc.get('customer'):
+		search_index_parts.append("HasCustomer")
+		search_index_parts.append(doc.customer)
+		# Fetch customer name if different
+		cust_name = frappe.db.get_value("Customer", doc.customer, "customer_name")
+		if cust_name: search_index_parts.append(cust_name)
+
+
 
 	if search_index_parts:
 		# Deduplicate and Join

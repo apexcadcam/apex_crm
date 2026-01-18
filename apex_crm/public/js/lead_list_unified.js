@@ -1621,10 +1621,29 @@ function setupLeadCardView(listview) {
         // Setup search bar first (this creates it if doesn't exist)
         let $searchBar = setupUniversalSearchBar(listview);
 
-        // CRITICAL: If search bar is already in stable wrapper, DO NOT TOUCH IT
-        if ($('.apex-stable-search-container').find('.apex-universal-search').length > 0) {
-            console.log("Apex CRM: Search bar is in stable container, skipping re-attachment");
-            $searchBar.show();
+        // STABILIZATION FIX:
+        // Do NOT detach/re-attach if it's already in the right place.
+        // This prevents input focus loss during re-renders.
+
+        const $expectedParent = $frappeList;
+        const $currentParent = $searchBar.parent();
+
+        // Check if already correctly positioned (first child of frappe-list)
+        const isCorrectlyPositioned = $currentParent.is($frappeList) &&
+            $frappeList.children().first().is($searchBar);
+
+        // Also check if it's in the special mobile wrapper we created
+        const isInMobileWrapper = $currentParent.hasClass('apex-mobile-search-wrapper');
+
+        if (isCorrectlyPositioned || isInMobileWrapper) {
+            // It's safe, don't move it.
+            // Just ensure it's visible.
+            $searchBar.css({
+                'display': 'block',
+                'visibility': 'visible',
+                'opacity': '1',
+                'width': '100%'
+            }).show();
         } else if ($searchBar && $searchBar.length) {
             // Remove from current parent if exists
             $searchBar.detach();
@@ -1859,10 +1878,17 @@ function setupUniversalSearchBar(listview) {
     };
 
     // Fields that need select dropdown
-    const selectFields = ['status', 'source', 'city', 'territory', 'country'];
+    const selectFields = ['status', 'source', 'city', 'territory', 'country',
+        'quotation_search', 'prospect_search', 'opportunity_search', 'customer_search'];
 
     // Get field options
     const getFieldOptions = (fieldName) => {
+        // Custom Options for Document Searches
+        if (fieldName === 'quotation_search') return ['HasQuotation'];
+        if (fieldName === 'prospect_search') return ['HasProspect'];
+        if (fieldName === 'opportunity_search') return ['HasOpportunity'];
+        if (fieldName === 'customer_search') return ['HasCustomer'];
+
         try {
             const meta = frappe.get_meta('Lead');
             if (!meta || !meta.fields) return getFallbackOptions(fieldName);
@@ -2053,6 +2079,10 @@ function setupUniversalSearchBar(listview) {
                     <option value="comment_search">Comments</option>
                     <option value="task_search">Tasks</option>
                     <option value="event_search">Events</option>
+                    <option value="quotation_search">Quotation</option>
+                    <option value="prospect_search">Prospect</option>
+                    <option value="opportunity_search">Opportunity</option>
+                    <option value="customer_search">Customer</option>
                     <option value="address_search">Address</option>
                     <option value="interaction_search">Interactions</option>
                 </select>
@@ -2070,42 +2100,41 @@ function setupUniversalSearchBar(listview) {
         </div>
     `);
 
-    // STABLE POSITIONING: Inject securely after the page header
-    // This allows it to scroll naturally but stay separate from the refreshing list.
-    setTimeout(() => {
-        // 1. Clean up fixed wrapper if exists (reverting user dislike)
-        $('.apex-fixed-search-wrapper').remove();
-        $('.apex-search-wrapper').remove(); // Clean old regular wrapper
+    // INJECTION LOGIC
+    // Consolidate to single logic: Prefer "Standard Filter Section" (Bottom)
+    // Only fallback to "Page Head" (Top) on Mobile/Missing Filter Section
 
-        // 2. Create a stable home for the search bar
-        // We inject it AFTER .page-head so it sits between header and list
+    // 1. Clean up old/duplicate wrappers
+    $('.apex-fixed-search-wrapper').remove();
+    $('.apex-search-wrapper').remove();
+    $('.apex-stable-search-container').remove(); // Remove stable wrapper that forced top view
+
+    const $stdFilterSection = listview.$page.find('.standard-filter-section');
+
+    // Check if we act like Desktop (Filter section exists and visible)
+    if ($stdFilterSection.length && $stdFilterSection.is(':visible')) {
+        // Inject into standard filter section (Bottom)
+        if ($stdFilterSection.find('.apex-universal-search').length === 0) {
+            $stdFilterSection.prepend($searchBar);
+        }
+    } else {
+        // Mobile / Fallback: Inject after Page Head (Top)
+        // This ensures it is visible on mobile where standard filter section might be hidden or different
         const $anchor = $('.page-head').first();
-        const $wrapperClass = 'apex-stable-search-container';
-
-        if ($(`.${$wrapperClass}`).length === 0) {
-            $anchor.after(`<div class="${$wrapperClass}" style="
-                background: #fff; 
-                z-index: 99; 
-                position: relative; 
-                padding: 10px 15px 0 15px; 
-                border-bottom: 1px solid #f3f4f6;
-            "></div>`);
+        // Use a simple wrapper for spacing if needed
+        if ($anchor.next('.apex-mobile-search-wrapper').length === 0) {
+            $anchor.after('<div class="apex-mobile-search-wrapper" style="background:#fff; z-index:99; padding-bottom:5px;"></div>');
+        }
+        const $mobileWrapper = $anchor.next('.apex-mobile-search-wrapper');
+        if ($mobileWrapper.find('.apex-universal-search').length === 0) {
+            $mobileWrapper.html($searchBar);
         }
 
-        const $wrapper = $(`.${$wrapperClass}`);
-
-        // 3. Move search bar to this stable wrapper if not already there
-        // This check prevents re-appending on every refresh, saving focus
-        if ($wrapper.find('.apex-universal-search').length === 0) {
-            $wrapper.append($searchBar);
-        }
-
-        // 4. Adjust spacing
+        // Adjust spacing for list
         if ($('.frappe-list').length) {
-            $('.frappe-list').css('margin-top', '0px'); // Reset margin
+            $('.frappe-list').css('margin-top', '0px');
         }
-
-    }, 100);
+    }
 
     // Get elements
     const $input = $searchBar.find('#lead-search-input');
@@ -2190,7 +2219,11 @@ function setupUniversalSearchBar(listview) {
             'task_search': __('Search in tasks...'),
             'event_search': __('Search in events...'),
             'address_search': __('Search in address...'),
-            'interaction_search': __('Search in interactions...')
+            'interaction_search': __('Search in interactions...'),
+            'quotation_search': __('Search by Quotation ID...'),
+            'prospect_search': __('Search by Prospect Name...'),
+            'opportunity_search': __('Search by Opportunity Name...'),
+            'customer_search': __('Search by Customer Name...')
         };
 
         if (placeholderMap[fieldName]) {
@@ -2272,6 +2305,23 @@ function setupUniversalSearchBar(listview) {
             actualField = 'custom_search_index';
             operator = 'like';
             filterValue = `%${val}%`; // Partial match for search index
+        }
+
+        // Document Search Fields (New)
+        if (['quotation_search', 'prospect_search', 'opportunity_search', 'customer_search'].includes(field)) {
+            actualField = 'custom_search_index';
+            operator = 'like';
+            // Search for specific token prefix
+            const docTypeMap = {
+                'quotation_search': 'Quotation',
+                'prospect_search': 'Prospect',
+                'opportunity_search': 'Opportunity',
+                'customer_search': 'Customer'
+            };
+            const prefix = docTypeMap[field];
+            // Loose match to allow partial typing, but prioritize the specific doc type section
+            // Ideally backend indexes as "Quotation: QTN-2023-001"
+            filterValue = `%${val}%`;
         }
 
         if (field === 'custom_search_index') {
