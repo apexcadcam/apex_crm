@@ -1879,7 +1879,8 @@ function setupUniversalSearchBar(listview) {
 
     // Fields that need select dropdown
     const selectFields = ['status', 'source', 'city', 'territory', 'country',
-        'quotation_search', 'prospect_search', 'opportunity_search', 'customer_search'];
+        'quotation_search', 'prospect_search', 'opportunity_search', 'customer_search',
+        'lead_owner', 'assigned_to', 'type', 'request_type'];
 
     // Get field options
     const getFieldOptions = (fieldName) => {
@@ -1888,6 +1889,11 @@ function setupUniversalSearchBar(listview) {
         if (fieldName === 'prospect_search') return ['HasProspect'];
         if (fieldName === 'opportunity_search') return ['HasOpportunity'];
         if (fieldName === 'customer_search') return ['HasCustomer'];
+
+        // Dynamic User List for Owner/Assigned
+        if (fieldName === 'lead_owner' || fieldName === 'assigned_to') {
+            return getActiveUserOptions();
+        }
 
         try {
             const meta = frappe.get_meta('Lead');
@@ -1963,6 +1969,20 @@ function setupUniversalSearchBar(listview) {
             return [...new Set(cities)].sort();
         } catch (e) {
             return getFallbackOptions('city');
+        }
+    };
+
+    // Get Active Users - returns Promise
+    const getActiveUserOptions = async () => {
+        try {
+            const users = await frappe.db.get_list('User', {
+                fields: ['email', 'full_name'],
+                filters: { enabled: 1, user_type: 'System User' },
+                limit: 200
+            });
+            return users.map(u => u.email).sort();
+        } catch (e) {
+            return [];
         }
     };
 
@@ -2079,7 +2099,11 @@ function setupUniversalSearchBar(listview) {
                     <option value="comment_search">Comments</option>
                     <option value="task_search">Tasks</option>
                     <option value="event_search">Events</option>
-                    <option value="quotation_search">Quotation</option>
+                <option value="lead_owner">Lead Owner</option>
+                <option value="assigned_to">Assigned To</option>
+                <option value="type">Lead Type</option>
+                <option value="request_type">Request Type</option>
+                <option value="quotation_search">Quotation</option>
                     <option value="prospect_search">Prospect</option>
                     <option value="opportunity_search">Opportunity</option>
                     <option value="customer_search">Customer</option>
@@ -2305,6 +2329,20 @@ function setupUniversalSearchBar(listview) {
             actualField = 'custom_search_index';
             operator = 'like';
             filterValue = `%${val}%`; // Partial match for search index
+        }
+
+        // Exact Match Fields (New Filters)
+        if (['lead_owner', 'type', 'request_type'].includes(field)) {
+            actualField = field;
+            operator = '=';
+            filterValue = val;
+        }
+
+        // Assigned To (JSON list search)
+        if (field === 'assigned_to') {
+            actualField = '_assign';
+            operator = 'like';
+            filterValue = `%${val}%`;
         }
 
         // Document Search Fields (New)
