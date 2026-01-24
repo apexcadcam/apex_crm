@@ -9,6 +9,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
+    "apex_customization"
 ]
 
 [build-system]

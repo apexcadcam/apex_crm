@@ -4,7 +4,9 @@ This module handles automatic migration of CRM customizations during installatio
 """
 
 import frappe
+import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+import frappe.model.sync
 
 
 def after_install():
@@ -28,6 +30,19 @@ def after_install():
 		
 		# Step 4: Setup Custom DocTypes
 		setup_custom_doctypes()
+
+		# Step 4.2: Setup Required Property Setters (UI Consistency)
+		setup_required_property_setters()
+
+		# Step 4.5: Force Schema Sync (Prevent "Unknown Column" errors)
+		print("🔄 Syncing Schema...")
+		frappe.model.sync.sync_all("Apex CRM")
+
+		# Step 4.6: Auto-Create Fiscal Year (Prevent Report Errors)
+		setup_fiscal_year()
+
+		# Step 4.7: Populate Search Index (Ensure Search works)
+		populate_custom_search_index()
 
 		# Step 5: Contact Data Migration - DISABLED
 		# Automatic migration is disabled to allow manual data entry
@@ -177,6 +192,130 @@ def setup_custom_doctypes():
 	print("  ℹ️  This will be used for future custom DocTypes\n")
 	
 	print("✅ Custom DocTypes Setup Complete\n")
+
+
+def setup_required_property_setters():
+	"""
+	Enforces critical UI properties (Filters, List Views) that might be missing in fresh installs.
+	Satisfies SaaS Readiness Item 7: UI Consistency.
+	"""
+	print("🔧 Setting up Required Property Setters...")
+	
+	# List of required property setters: (DocType, Field, Property, Value, Type)
+	required_properties = [
+		("Lead", "request_type", "in_standard_filter", "1", "Check"),
+		("Lead", "request_type", "in_list_view", "1", "Check"),
+		("Lead", "lead_owner", "in_standard_filter", "1", "Check"),
+		("Lead", "lead_owner", "in_list_view", "1", "Check"),
+		("Lead", "type", "in_standard_filter", "1", "Check"), # "Lead Type"
+	]
+	
+	count = 0
+	for dt, field, prop, val, ptype in required_properties:
+		# Check if exists
+		name = f"{dt}-{field}-{prop}"
+		exists = frappe.db.exists("Property Setter", name)
+		
+		if not exists:
+			try:
+				frappe.get_doc({
+					"doctype": "Property Setter",
+					"doctype_or_field": "DocField",
+					"doc_type": dt,
+					"field_name": field,
+					"property": prop,
+					"value": val,
+					"property_type": ptype,
+					"module": "Apex CRM"
+				}).insert(ignore_permissions=True)
+				print(f"  ✓ Created {name}")
+				count += 1
+			except Exception as e:
+				print(f"  ⚠️ Failed to create {name}: {str(e)}")
+	
+	if count > 0:
+		print(f"  ✅ Created {count} missing Property Setters")
+	else:
+		print("  ℹ️  All required Property Setters already exist")
+
+
+def setup_fiscal_year():
+	"""
+	Auto-creates the current Fiscal Year if it doesn't exist.
+	Essential for SaaS one-click installs to prevent Report errors.
+	"""
+	print("📅 Setting up Fiscal Year...")
+	from frappe.utils import getdate, add_years
+	
+	current_year = getdate().year
+	fy_name = str(current_year)
+	
+	if not frappe.db.exists("Fiscal Year", fy_name):
+		try:
+			fy = frappe.new_doc("Fiscal Year")
+			fy.year = fy_name
+			fy.year_start_date = f"{current_year}-01-01"
+			fy.year_end_date = f"{current_year}-12-31"
+			fy.disabled = 0
+			fy.insert(ignore_permissions=True)
+			print(f"  ✅ Created Fiscal Year: {fy_name}")
+			
+			# Set as Global Default if none set
+			if not frappe.db.get_single_value("Global Defaults", "current_fiscal_year"):
+				frappe.db.set_value("Global Defaults", None, "current_fiscal_year", fy_name)
+				print(f"  ✅ Set {fy_name} as default Fiscal Year")
+				
+		except Exception as e:
+			print(f"  ⚠️ Could not create Fiscal Year: {str(e)}")
+	else:
+		print(f"  ℹ️  Fiscal Year {fy_name} already exists")
+
+
+def populate_custom_search_index():
+	"""
+	Populates custom_search_index for Leads if empty.
+	"""
+	print("🔍 Populating Search Index...")
+	
+	# Check if we need to run (only if index is empty for many leads)
+	# optimized check: count leads with empty index
+	pending = frappe.db.count("Lead", filters={"custom_search_index": ["is", "not set"]})
+	
+	if pending == 0:
+		print("  ℹ️  Search Index already populated")
+		return
+
+	print(f"  Found {pending} leads with missing search index. Updating...")
+	
+	# Trigger the sync logic batch-wise via API function logic (re-using sync_contacts logic logic roughly)
+	# Easier: Just trigger save() on them? Too slow.
+	# Better: Use the API method `sync_contacts` logic but optimized.
+	# Actually, `sync_contacts` is triggered on Save/Update.
+	# Let's trigger a dummy update or call the function directly if imported.
+	
+	try:
+		# Batch fetch leads
+		leads = frappe.get_all("Lead", filters={"custom_search_index": ["is", "not set"]}, fields=["name"])
+		from apex_crm.api import sync_contacts
+		
+		count = 0
+		for l in leads:
+			doc = frappe.get_doc("Lead", l.name)
+			try:
+				sync_contacts(doc, "update") # This populates the index
+				# We don't need to save doc if sync_contacts uses db_set, 
+				# BUT sync_contacts calls db_set which commits? No, db_set does direct update.
+				# Let's check api.py... yes, it uses doc.db_set.
+				count += 1
+				if count % 50 == 0:
+					print(f"    Processed {count}...")
+			except Exception:
+				continue
+				
+		print(f"  ✅ Populated Search Index for {count} leads")
+		
+	except Exception as e:
+		print(f"  ⚠️ Failed to populate search index: {str(e)}")
 
 
 def before_install():

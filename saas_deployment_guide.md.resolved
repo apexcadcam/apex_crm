@@ -1,0 +1,87 @@
+# SaaS Deployment Readiness Report & Refactoring Guide
+
+To ensure the Apex Application Suite installs seamlessly on a SaaS server (one-click install) without the manual interventions we performed today, the following architectural changes are **CRITICAL**.
+
+## 1. Eliminate "Hidden" Dependencies (The Root Cause)
+Current State: `bench install-app apex_crm` fails because it tries to load `apex_dashboard` or `apex_customization` code before they are installed.
+**Requirement**:
+- **Apps must declare dependencies explicitly.**
+- **File**: [apps/apex_crm/pyproject.toml](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/pyproject.toml)
+- **Change**: Add `dependencies = ["apex_customization"]`
+- **Benefit**: `bench get-app apex_crm` will *automatically* fetch `apex_customization`.
+
+## 2. Robust Schema Management (No More "Unknown Column")
+Current State: `voice_note` column was missing because the database schema was out-of-sync with the JSON definition.
+**Requirement**:
+- **Always run `bench migrate` in [after_install](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/install.py#10-49) hooks.**
+- **File**: [apps/apex_crm/apex_crm/hooks.py](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/hooks.py)
+- **Change**: ensure `after_install = "apex_crm.install.after_install"` calls `frappe.model.sync.sync_all("Apex CRM")`.
+
+## 3. Safe Import Pattern (Prevent Boot Crashes)
+Current State: If App A imports App B, and App B is not installed, the *entire server crashes* (AttributeError/ModuleNotFoundError).
+**Requirement**:
+- **Use Lazy Imports** inside functions, not at the top of the file.
+- **Example**:
+    ```python
+    def get_dashboard_data():
+        # GOOD: Import inside function
+        from apex_customization.utils import get_data 
+        return get_data()
+    ```
+    Instead of:
+    ```python
+    # BAD: Top-level import crashes server if app is missing
+    from apex_customization.utils import get_data 
+    ```
+
+## 4. Automate Fiscal Year Creation
+Current State: Reports crash with `FiscalYearError` on fresh installs.
+**Requirement**:
+- **Auto-create Fiscal Year in `setup.py` or [after_install](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/install.py#10-49) Hook.**
+- **Logic**: Check if the current year exists directly after app installation; if not, create it. This ensures immediate usability for the user.
+
+## 5. Automated "Clean Slate" Installation Script
+For any future deployment, use a standard script instead of manual commands. This script guarantees the order of operations.
+
+**Proposed Script (`install_apex_saas.sh`):**
+```bash
+#!/bin/bash
+# 1. Get Core Customization Layer First
+bench get-app https://github.com/apexcadcam/apex-customization
+
+# 2. Get CRM (will read dependency from toml if fixed, but safe to be explicit)
+bench get-app https://github.com/apexcadcam/apex_crm
+
+# 3. Install in Strict Order
+bench --site $1 install-app apex_customization
+bench --site $1 install-app apex_crm
+
+# 4. Force Migration & Cache Clear
+bench --site $1 migrate
+bench --site $1 clear-cache
+```
+
+## 6. Metadata Integrity & Search Index
+Current State: Search failed due to invalid [search_fields](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/debug_search_fields.py#3-21) and empty `custom_search_index`.
+**Requirement**:
+- **Validate [search_fields](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/debug_search_fields.py#3-21)**: Ensure [install.py](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/install.py) checks target properties before setting them.
+- **Search Index Population Hook**: Add an `after_migrate` hook to populate `custom_search_index` for existing data if it's empty.
+
+## 7. UI Consistency & Standard Filters
+Current State: `request_type` ("Product Enquiry") was not selectable.
+**Requirement**:
+- **Explicit Property Setters**: In `fixtures` or [install.py](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/install.py), explicitly set `in_standard_filter` and `in_list_view` for critical fields like `request_type`.
+
+## 8. Legacy Data Handling (The Mandatory Field Trap)
+Current State: Adding a contact failed because old leads lacked `gender` or `custom_full_name`.
+**Requirement**:
+- **Graceful Fallbacks**: In API methods (like [add_smart_contact](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/api.py#464-501)), implement fallback logic (e.g., `lead_name` -> `custom_full_name`) before saving.
+- **Safe Save**: Use `doc.flags.ignore_mandatory = True` when performing background updates on partially filled legacy documents.
+
+## Summary Checklist for Developers
+1. [ ] Update [pyproject.toml](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/pyproject.toml) in all apps.
+2. [ ] Move cross-app imports inside functions (Lazy Loading).
+3. [ ] Add [after_install](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/install.py#10-49) hook to create current Fiscal Year.
+4. [ ] Verify [hooks.py](file://wsl.localhost/Ubuntu-24.04/home/gaber/frappe-bench/apps/apex_crm/apex_crm/hooks.py) has `required_apps = ["apex_customization"]`.
+5. [ ] Implement `after_migrate` hook to populate `custom_search_index`.
+6. [ ] Add `ignore_mandatory=True` handling in all public API methods affecting legacy docs.

@@ -152,7 +152,7 @@ window.apex_crm_list = {
 };
 
 frappe.listview_settings['Lead'] = {
-    add_fields: ['title', 'status', 'mobile_no', 'company_name', 'email_id', 'city', 'territory', 'lead_owner', 'type', 'request_type', 'source', 'lead_name', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index'],
+    add_fields: ['title', 'status', 'mobile_no', 'company_name', 'email_id', 'city', 'territory', 'lead_owner', 'type', 'request_type', 'source', 'lead_name', 'qualification_status', 'smart_contact_details', 'smart_contact_summary', 'custom_search_index'],
 
     formatters: {
         smart_contact_summary: function (value, doc) {
@@ -1104,6 +1104,63 @@ function setupLeadCardView(listview) {
     };
 
 
+    // 5b. QUALIFICATION STATUS POPOVER
+    window.apex_crm_show_qa_popover = function (event, lead_name, current_status) {
+        $('.apex-status-popover').remove();
+        const statuses = ['Unqualified', 'In Process', 'Qualified'];
+        // QA Status Colors: Unqualified (Gray), In Process (Blue), Qualified (Green)
+        const qColors = { 'Unqualified': '#6b7280', 'In Process': '#2563eb', 'Qualified': '#16a34a' };
+
+        const target = $(event.currentTarget);
+        const offset = target.offset();
+        const height = target.outerHeight();
+
+        let popoverHtml = `
+            <div class="apex-status-popover" style="position: absolute; top: ${offset.top + height + 5}px; left: ${offset.left - 20}px; min-width: 140px; background: white; border: 1px solid #e5e7eb; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-radius: 8px; padding: 6px; z-index: 1000; display: flex; flex-direction: column; gap: 4px;">
+        `;
+
+        statuses.forEach(status => {
+            const isActive = status === (current_status || 'Unqualified');
+            const color = qColors[status] || '#6b7280';
+            popoverHtml += `
+                <div onclick="window.apex_crm_update_qa_submit('${lead_name}', '${status}', this)" 
+                     style="padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; color: ${color}; ${isActive ? 'background-color: #f3f4f6;' : ''}"
+                     onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='${isActive ? '#f3f4f6' : 'transparent'}'">
+                     <span>${status}</span>
+                     ${isActive ? '<i class="fa fa-check"></i>' : ''}
+                </div>
+            `;
+        });
+        popoverHtml += '</div>';
+        $('body').append(popoverHtml);
+
+        setTimeout(() => {
+            $(document).on('click.apex_popover', function (e) {
+                if (!$(e.target).closest('.apex-status-popover').length && !$(e.target).closest(target).length) {
+                    $('.apex-status-popover').remove();
+                    $(document).off('click.apex_popover');
+                }
+            });
+        }, 100);
+    };
+
+    window.apex_crm_update_qa_submit = function (lead, new_status, btn) {
+        if ($(btn).hasClass('processing')) return;
+        $(btn).addClass('processing').css('opacity', '0.6');
+        frappe.call({
+            method: 'apex_crm.api.update_qualification_status',
+            args: { lead: lead, status: new_status },
+            callback: function (r) {
+                if (!r.exc) {
+                    frappe.show_alert({ message: __('Qualification Updated'), indicator: 'green' });
+                    $('.apex-status-popover').remove();
+                    if (window.global_listview_ref) setTimeout(() => window.global_listview_ref.refresh(), 500);
+                }
+                $(btn).removeClass('processing');
+            }
+        });
+    };
+
     // CREATE CARD (With History Dialog Click)
     const createPremiumCard = (doc) => {
         const lead_name = doc.lead_name || doc.name;
@@ -1371,7 +1428,16 @@ function setupLeadCardView(listview) {
                                 ${doc.source ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.source}</span>` : ''}
                                 ${doc.lead_owner ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.lead_owner}</span>` : ''}
                                 ${doc.type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.type}</span>` : ''}
+                                ${doc.type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.type}</span>` : ''}
                                 ${doc.request_type ? `<span style="background:#f3f4f6; color:#1f2937; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">${doc.request_type}</span>` : ''}
+                                <!-- Qualification Status -->
+                                <span onclick="event.stopPropagation(); window.apex_crm_show_qa_popover(event, '${doc.name}', '${doc.qualification_status}');" 
+                                      style="background:${doc.qualification_status === 'Qualified' ? '#dcfce7' : (doc.qualification_status === 'In Process' ? '#dbeafe' : '#f3f4f6')}; 
+                                             color:${doc.qualification_status === 'Qualified' ? '#166534' : (doc.qualification_status === 'In Process' ? '#1e40af' : '#4b5563')}; 
+                                             border:1px solid ${doc.qualification_status === 'Qualified' ? '#bbf7d0' : (doc.qualification_status === 'In Process' ? '#bfdbfe' : '#e5e7eb')}; 
+                                             padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                    ${doc.qualification_status || 'Unqualified'} <i class="fa fa-caret-down" style="font-size:10px; opacity:0.7;"></i>
+                                </span>
                             </div>
                         </div>
                     </div>

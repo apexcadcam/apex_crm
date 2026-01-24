@@ -427,7 +427,7 @@ def cleanup_contacts(lead_name):
             doc.smart_contact_details = unique_contacts
             
             if len(unique_contacts) < original_count:
-                doc.save()
+                doc.save(ignore_mandatory=True)
 
 @frappe.whitelist()
 def delete_lead(lead_name):
@@ -490,7 +490,7 @@ def add_smart_contact(lead, type, value, country_code=None):
     if country_code:
         new_row.country_code = country_code
         
-    doc.save()
+    doc.save(ignore_mandatory=True)
     return {"status": "success", "message": "Contact Added"}
 
 def sync_contacts(doc, method):
@@ -699,6 +699,20 @@ def sync_contacts(doc, method):
 
 	# 4. Sync to Standard 'Address' Document
 	sync_address_doctype(doc)
+
+@frappe.whitelist()
+def update_qualification_status(lead, status):
+	"""
+	Updates the Qualification Status of a Lead directly via DB query.
+	Bypasses standard DocType validation to handle legacy data issues (e.g. invalid Lead Type options).
+	"""
+	if not lead or not status:
+		frappe.throw(_("Lead and Status are required"))
+
+	# Direct DB update to bypass validation of other fields
+	frappe.db.set_value("Lead", lead, "qualification_status", status)
+	
+	return {"status": "success"}
 
 def sync_to_contact_doctype(lead_doc):
 	try:

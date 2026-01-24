@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["apex_customization"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 app_include_css = "/assets/apex_crm/css/apex_cards.css"
-app_include_js = ["/assets/apex_crm/js/site_switcher.js"]
+app_include_js = ["/assets/apex_crm/js/site_switcher.js", "/assets/apex_crm/js/utils.js"]
 
 
 
