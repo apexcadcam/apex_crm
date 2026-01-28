@@ -305,6 +305,23 @@ frappe.listview_settings['Lead'] = {
                     [data-theme="dark"] .card-name {
                         color: #f3f4f6 !important;
                     }
+                    /* Fix White Line & Footer Background */
+                    [data-theme="dark"] .quick-actions-bar,
+                    [data-theme="dark"] .card-info-body,
+                    [data-theme="dark"] .latest-interaction-box {
+                        background-color: transparent !important; /* Remove white backgrounds */
+                        border-color: #374151 !important; /* Darken borders */
+                        color: #9ca3af !important;
+                    }
+                    [data-theme="dark"] .latest-interaction-box {
+                        background-color: #1f2937 !important; /* Match card bg */
+                        border-top: 1px solid #374151 !important;
+                    }
+                    [data-theme="dark"] .info-pill {
+                        background-color: #374151 !important;
+                        color: #d1d5db !important;
+                        border: 1px solid #4b5563 !important;
+                    }
 
                     /* 3. SWITCHER LAYOUT STABILITY */
                     .switcher-display {
