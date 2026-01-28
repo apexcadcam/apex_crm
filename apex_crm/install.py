@@ -42,6 +42,7 @@ def after_install():
 		setup_fiscal_year()
 
 		# Step 4.7: Populate Search Index (Ensure Search works)
+		create_contact_summary_field()
 		setup_search_fields()
 		setup_note_fields()
 		create_smart_contact_field()
@@ -389,6 +390,35 @@ def before_install():
 	
 	print("✅ ERPNext is installed")
 	print("✅ Pre-installation checks passed\n")
+
+def create_contact_summary_field():
+	"""
+	Creates the smart_contact_summary field in Lead if it is missing.
+	Required for List View "Contact Details" column.
+	"""
+	print("🔧 Setting up Contact Summary Field...")
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+	
+	if not frappe.db.has_column("Lead", "smart_contact_summary"):
+		create_custom_fields({
+			"Lead": [
+				{
+					"fieldname": "smart_contact_summary",
+					"label": "Contact Details",
+					"fieldtype": "Small Text",
+					"insert_after": "lead_name",
+					"hidden": 0,
+					"read_only": 1,
+					"in_list_view": 1,
+					"columns": 2,
+					"module": "Apex CRM"
+				}
+			]
+		})
+		frappe.db.commit()
+		print("  ✅ Created missing field: smart_contact_summary in Lead")
+	else:
+		print("  ℹ️  Field smart_contact_summary already exists in Lead")
 
 def create_smart_contact_field():
 	"""
