@@ -2819,7 +2819,7 @@ def get_lead_interaction_history(lead):
     # Fetch logs where parent = lead
     return frappe.get_all('Apex Interaction Log', 
         filters={'parent': lead}, 
-        fields=['type', 'status', 'summary', 'timestamp', 'user', 'voice_note'],
+        fields=['type', 'status', 'summary', 'timestamp', 'user'],
         order_by='timestamp desc'
     )
 
@@ -2842,7 +2842,7 @@ def log_interaction(lead, type, status, summary=None, duration=None, voice_note=
         "status": status,
         "summary": summary,
         "duration": duration,
-        "voice_note": voice_note,
+        # "voice_note": voice_note, # Disabled until column exists
         "user": frappe.session.user,
         "timestamp": frappe.utils.now_datetime()
     })
