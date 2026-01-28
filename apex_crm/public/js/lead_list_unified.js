@@ -269,7 +269,7 @@ frappe.listview_settings['Lead'] = {
                             <span class="sw-value" style="font-weight: 500; color: inherit; font-size: 13px;">${displayVal}</span>
                         </a>
                         
-                        <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-left: 4px;">
+                        <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-left: 4px; flex-shrink: 0;">
                             <i class="fa fa-caret-down" style="color: var(--text-color); font-size: 12px;"></i>
                             <select class="switcher-select"
                                 onchange="window.apex_crm_list.handle_switch(this)"
@@ -282,16 +282,35 @@ frappe.listview_settings['Lead'] = {
                         </div>
                  </div>
                  <style>
-                    /* Fix Mobile Card Background in Dark Mode */
-                    [data-theme="dark"] .list-row-container, 
-                    [data-theme="dark"] .list-item {
-                        background-color: var(--card-bg) !important;
-                        border-bottom: 1px solid var(--border-color) !important;
+                    /* 1. FORCE CONTACT COLUMN WIDTH */
+                    .list-row-col.list-subject.ellipses[data-fieldname="smart_contact_summary"],
+                    .list-row-col[data-fieldname="smart_contact_summary"] {
+                        min-width: 240px !important; 
+                        flex-basis: 240px !important;
                     }
-                    /* Ensure Arrow is never squeezed out */
+
+                    /* 2. MOBILE DARK MODE FIX (Targeting Apex Card) */
+                    [data-theme="dark"] .apex-premium-card {
+                        background-color: #1f2937 !important;
+                        border-color: #374151 !important;
+                        color: #e5e7eb !important;
+                    }
+                    [data-theme="dark"] .apex-premium-card .card-header,
+                    [data-theme="dark"] .apex-premium-card .phone-display {
+                        background-color: #111827 !important; /* Darker header/pill */
+                        border-color: #374151 !important;
+                        color: #e5e7eb !important;
+                    }
+                    [data-theme="dark"] .phone-text, 
+                    [data-theme="dark"] .card-name {
+                        color: #f3f4f6 !important;
+                    }
+
+                    /* 3. SWITCHER LAYOUT STABILITY */
                     .switcher-display {
                         flex-wrap: nowrap !important;
                         min-width: 0;
+                        max-width: 100%; /* Allow expansion if space permits */
                     }
                     .sw-link {
                         white-space: nowrap;
