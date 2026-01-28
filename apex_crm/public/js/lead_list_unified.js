@@ -266,11 +266,11 @@ frappe.listview_settings['Lead'] = {
                  <div class="switcher-display" style="position: relative; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; display: inline-flex; align-items: center; gap: 6px; max-width: 300px;">
                         <a href="${href}" target="_blank" class="sw-link" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: inherit;" onclick="event.stopPropagation();">
                             <span class="sw-flag">${countryCodeHtml0}</span>
-                            <span class="sw-value" style="font-weight: 500; color: #e5e7eb; font-size: 13px;">${displayVal}</span>
+                            <span class="sw-value" style="font-weight: 500; color: inherit; font-size: 13px;">${displayVal}</span>
                         </a>
                         
                         <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-left: 4px;">
-                            <i class="fa fa-caret-down" style="color: #e5e7eb; font-size: 12px;"></i>
+                            <i class="fa fa-caret-down" style="color: var(--text-color); font-size: 12px;"></i>
                             <select class="switcher-select"
                                 onchange="window.apex_crm_list.handle_switch(this)"
                                 onclick="event.stopPropagation();"
