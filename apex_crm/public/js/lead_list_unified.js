@@ -281,6 +281,26 @@ frappe.listview_settings['Lead'] = {
                             </select>
                         </div>
                  </div>
+                 <style>
+                    /* Fix Mobile Card Background in Dark Mode */
+                    [data-theme="dark"] .list-row-container, 
+                    [data-theme="dark"] .list-item {
+                        background-color: var(--card-bg) !important;
+                        border-bottom: 1px solid var(--border-color) !important;
+                    }
+                    /* Ensure Arrow is never squeezed out */
+                    .switcher-display {
+                        flex-wrap: nowrap !important;
+                        min-width: 0;
+                    }
+                    .sw-link {
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        min-width: 0;
+                        flex-shrink: 1;
+                    }
+                 </style>
             </div>`;
         }
     },

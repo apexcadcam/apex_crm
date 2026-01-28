@@ -409,7 +409,7 @@ def create_contact_summary_field():
 					"hidden": 0,
 					"read_only": 1,
 					"in_list_view": 1,
-					"columns": 2,
+					"columns": 4,
 					"module": "Apex CRM"
 				}
 			]
@@ -417,7 +417,13 @@ def create_contact_summary_field():
 		frappe.db.commit()
 		print("  ✅ Created missing field: smart_contact_summary in Lead")
 	else:
-		print("  ℹ️  Field smart_contact_summary already exists in Lead")
+		# Enforce column width update for existing field
+		if frappe.db.exists("Custom Field", {"dt": "Lead", "fieldname": "smart_contact_summary"}):
+			frappe.db.set_value("Custom Field", {"dt": "Lead", "fieldname": "smart_contact_summary"}, "columns", 4)
+			frappe.db.commit()
+			print("  ✅ Updated existing field: smart_contact_summary columns -> 4")
+		else:
+			print("  ℹ️  Field smart_contact_summary exists (Property Setter managed?)")
 
 def create_smart_contact_field():
 	"""
