@@ -48,10 +48,9 @@ def after_install():
 		create_smart_contact_field()
 		populate_custom_search_index()
 
-		# Step 5: Contact Data Migration - DISABLED
-		# Automatic migration is disabled to allow manual data entry
-		# Users can add contacts manually using the Apex Contacts section
-		# migrate_contact_data()  # ← Disabled for manual data entry
+		# Step 5: Contact Data Migration
+		# Automatic migration is ENABLED to populate initial data
+		migrate_contact_data()
 		
 		print("\n" + "="*80)
 		print("Apex CRM: Setup Completed Successfully!")
@@ -511,6 +510,18 @@ def migrate_contact_data():
 			# If not, return default code and full value
 			return default_code, val
 
+		def force_save_contacts(doc):
+			frappe.db.delete("Apex Contact Detail", {"parent": doc.name})
+			for i, row in enumerate(doc.smart_contact_details):
+				row.name = frappe.generate_hash(length=10)
+				row.parent = doc.name
+				row.parenttype = "Lead"
+				row.parentfield = "smart_contact_details"
+				row.docstatus = 0
+				row.idx = i + 1
+				row.db_insert()
+			frappe.db.set_value("Lead", doc.name, "modified", frappe.utils.now())
+
 		for lead_data in leads:
 			try:
 				doc = frappe.get_doc("Lead", lead_data.name)
@@ -562,7 +573,7 @@ def migrate_contact_data():
 					
 					if has_cleanup:
 						doc.smart_contact_details = clean_rows
-						doc.save(ignore_permissions=True)
+						force_save_contacts(doc)
 						doc = frappe.get_doc("Lead", lead_data.name)
 
 				modified = False
@@ -625,9 +636,7 @@ def migrate_contact_data():
 						if add_contact(ctype, doc.website, code_hint=""): modified = True
 					
 				if modified:
-					doc.flags.ignore_mandatory = True
-					doc.flags.ignore_validate = True # Also skip validations if possible
-					doc.save(ignore_permissions=True)
+					force_save_contacts(doc)
 					count += 1
 					if count % 50 == 0:
 						frappe.db.commit()
