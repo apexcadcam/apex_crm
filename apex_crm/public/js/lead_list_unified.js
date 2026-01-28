@@ -166,11 +166,32 @@ frappe.listview_settings['Lead'] = {
             }
 
             // Fallback for empty contacts but existing value string (legacy/simple)
+            // Fallback for empty contacts but existing value string (legacy/simple)
             if (contacts.length === 0 && value) {
                 let parts = value.split('|').map(p => p.trim());
-                contacts = parts.map(p => ({
-                    type: 'Other', value: p, country_code: window.apex_crm_list.guess_country_code(p)
-                }));
+                contacts = parts.map(p => {
+                    let type = 'Other';
+                    let val = p;
+                    // Detect Type from Icon/Prefix
+                    if (p.includes('📱')) { type = 'Mobile'; }
+                    else if (p.includes('☎️')) { type = 'Phone'; }
+                    else if (p.includes('💬')) { type = 'WhatsApp'; }
+                    else if (p.includes('📧')) { type = 'Email'; }
+                    else if (p.includes('📍')) { type = 'Address'; }
+                    else if (p.includes('🌐') || p.startsWith('http')) { type = 'Website'; }
+                    else if (p.includes('FB')) { type = 'Facebook'; }
+                    else if (p.includes('LI')) { type = 'LinkedIn'; }
+                    else if (p.includes('IG')) { type = 'Instagram'; }
+
+                    // Strip icons/prefixes for clean value
+                    val = val.replace(/[📱☎️📧📍🌐🏠💬]/g, '').replace(/^(FB|LI|IG)\s*/, '').trim();
+
+                    return {
+                        type: type,
+                        value: val,
+                        country_code: window.apex_crm_list.guess_country_code(val)
+                    };
+                });
             }
 
             if (contacts.length === 0) return value || ''; // Fallback to raw value if nothing parsed
@@ -245,11 +266,11 @@ frappe.listview_settings['Lead'] = {
                  <div class="switcher-display" style="position: relative; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; display: inline-flex; align-items: center; gap: 6px; max-width: 300px;">
                         <a href="${href}" target="_blank" class="sw-link" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: inherit;" onclick="event.stopPropagation();">
                             <span class="sw-flag">${countryCodeHtml0}</span>
-                            <span class="sw-value" style="font-weight: 400; color: #333; font-size: 13px;">${displayVal}</span>
+                            <span class="sw-value" style="font-weight: 400; color: inherit; font-size: 13px;">${displayVal}</span>
                         </a>
                         
-                        <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin-left: 4px;">
-                            <i class="fa fa-caret-down" style="color: #888; font-size: 10px;"></i>
+                        <div style="position: relative; width: 20px; height: 20px; display: ${contacts.length > 1 ? 'flex' : 'none'}; align-items: center; justify-content: center; margin-left: 4px;">
+                            <i class="fa fa-caret-down" style="color: var(--text-muted); font-size: 10px;"></i>
                             <select class="switcher-select"
                                 onchange="window.apex_crm_list.handle_switch(this)"
                                 onclick="event.stopPropagation();"
