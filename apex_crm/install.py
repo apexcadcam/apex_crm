@@ -42,6 +42,8 @@ def after_install():
 		setup_fiscal_year()
 
 		# Step 4.7: Populate Search Index (Ensure Search works)
+		setup_search_fields()
+		setup_note_fields()
 		populate_custom_search_index()
 
 		# Step 5: Contact Data Migration - DISABLED
@@ -269,6 +271,60 @@ def setup_fiscal_year():
 			print(f"  ⚠️ Could not create Fiscal Year: {str(e)}")
 	else:
 		print(f"  ℹ️  Fiscal Year {fy_name} already exists")
+
+
+def setup_search_fields():
+	"""
+	Creates the custom_search_index field if it is missing.
+	Fixes the 'Unknown column' error during installation.
+	"""
+	print("🔧 Setting up Search Fields...")
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+	
+	if not frappe.db.has_column("Lead", "custom_search_index"):
+		create_custom_fields({
+			"Lead": [
+				{
+					"fieldname": "custom_search_index",
+					"label": "Custom Search Index",
+					"fieldtype": "Text",
+					"hidden": 1,
+					"insert_after": "smart_contact_summary",
+					"module": "Apex CRM"
+				}
+			]
+		})
+		frappe.db.commit()
+		print("  ✅ Created missing field: custom_search_index")
+	else:
+		print("  ℹ️  Field custom_search_index already exists")
+
+
+def setup_note_fields():
+	"""
+	Creates the custom_lead field in Note if it is missing.
+	Fixes the 'Unknown column' error in dashboard.
+	"""
+	print("🔧 Setting up Note Fields...")
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+	
+	if not frappe.db.has_column("Note", "custom_lead"):
+		create_custom_fields({
+			"Note": [
+				{
+					"fieldname": "custom_lead",
+					"label": "Lead",
+					"fieldtype": "Link",
+					"options": "Lead",
+					"insert_after": "public",
+					"module": "Apex CRM"
+				}
+			]
+		})
+		frappe.db.commit()
+		print("  ✅ Created missing field: custom_lead in Note")
+	else:
+		print("  ℹ️  Field custom_lead already exists in Note")
 
 
 def populate_custom_search_index():
