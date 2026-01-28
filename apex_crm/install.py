@@ -44,6 +44,7 @@ def after_install():
 		# Step 4.7: Populate Search Index (Ensure Search works)
 		setup_search_fields()
 		setup_note_fields()
+		create_smart_contact_field()
 		populate_custom_search_index()
 
 		# Step 5: Contact Data Migration - DISABLED
